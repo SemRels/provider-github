@@ -1,41 +1,44 @@
-# {{PLUGIN_NAME}}
+﻿# provider-github
 
-> Replace this description with what your SemRel plugin does.
+GitHub provider plugin for Semantic Release.
 
-This repository is based on the `SemRels/plugin-template` GitHub template and provides a clean starting point for provider, analyzer, generator, updater, or hook plugins.
+Provides GitHub repository, release, and metadata integration for Semantic Release.
+
+## Documentation
+
+- Docs (coming soon): <https://github.com/SemRels/semrel/tree/main/docs/plugins/provider-github>
+- Template source: <https://github.com/SemRels/plugin-template>
 
 ## Repository Layout
 
-```text
+`	ext
 cmd/plugin/              Plugin entry point
 internal/plugin/         Business logic scaffold
 internal/grpc/           gRPC transport scaffold
 proto/v1                 Symlink to the SemRel protobuf contract
 .github/workflows/       CI, release, and security automation
-```
-
-## Installation
-
-Published binaries are distributed through releases and synchronized to `registry.semrel.io`.
+`
 
 ## Development
 
-```bash
+`ash
 go build ./cmd/plugin
 go test ./...
-```
+`
 
-## Configuration
+## Configuration Example
 
-See the SemRel documentation for plugin configuration and runtime integration details:
+`yaml
+plugins:
+  - name: provider-github
+    type: provider
+    config:
+      api_url: https://api.github.com
+      owner: SemRels
+      repository: example-repo
+      token: ${GITHUB_TOKEN}
+`
 
-- https://github.com/SemRels/semrel
-- https://registry.semrel.io
+## Status
 
-## Next Steps
-
-1. Replace all `{{...}}` placeholders.
-2. Rename the module path in `go.mod`.
-3. Implement your plugin logic in `internal/plugin/`.
-4. Wire generated protobuf bindings into `internal/grpc/`.
-5. Create your first tagged release with `v*.*.*`.
+This repository is bootstrapped from SemRels/plugin-template and is ready for implementation.

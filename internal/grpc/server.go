@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+﻿// SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 The plugin-template Authors
 
 package grpc
@@ -6,7 +6,7 @@ package grpc
 import (
 	"context"
 
-	semrelplugin "github.com/SemRels/plugin-template/internal/plugin"
+	semrelplugin "github.com/SemRels/provider-github/internal/plugin"
 )
 
 // HealthResponse is a lightweight stand-in until generated protobuf bindings are wired in.
@@ -30,3 +30,4 @@ func (s *ProviderServer) Health(ctx context.Context) (*HealthResponse, error) {
 
 	return &HealthResponse{Name: s.provider.Name()}, nil
 }
+

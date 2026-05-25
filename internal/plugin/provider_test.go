@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+﻿// SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 The plugin-template Authors
 
 package plugin
@@ -15,7 +15,7 @@ func TestNewProviderDefaultsName(t *testing.T) {
 
 	provider := NewProvider("")
 
-	require.Equal(t, "replace-me", provider.Name())
+	require.Equal(t, "provider-github", provider.Name())
 	require.NoError(t, provider.HealthCheck(context.Background()))
 }
 
@@ -26,3 +26,4 @@ func TestNewProviderUsesProvidedName(t *testing.T) {
 
 	require.Equal(t, "provider-example", provider.Name())
 }
+

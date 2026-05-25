@@ -1,4 +1,4 @@
-module github.com/SemRels/plugin-template
+﻿module github.com/SemRels/provider-github
 
 go 1.24
 
@@ -11,3 +11,4 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+

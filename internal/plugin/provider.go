@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+﻿// SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2026 The plugin-template Authors
 
 package plugin
@@ -18,7 +18,7 @@ type ProviderPlugin struct {
 
 func NewProvider(name string) *ProviderPlugin {
 	if name == "" {
-		name = "replace-me"
+		name = "provider-github"
 	}
 
 	return &ProviderPlugin{name: name}
@@ -31,3 +31,4 @@ func (p *ProviderPlugin) Name() string {
 func (p *ProviderPlugin) HealthCheck(context.Context) error {
 	return nil
 }
+
