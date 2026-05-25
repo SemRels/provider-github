@@ -3,7 +3,7 @@ module github.com/SemRels/provider-github
 go 1.24.0
 
 require (
-	github.com/SemRels/semrel-api v0.1.2
+	github.com/SemRels/semrel-api v0.1.4
 	github.com/google/go-github/v69 v69.2.0
 	github.com/hashicorp/go-plugin v1.8.0
 	github.com/stretchr/testify v1.10.0
@@ -20,11 +20,11 @@ require (
 	github.com/mattn/go-isatty v0.0.17 // indirect
 	github.com/oklog/run v1.1.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	golang.org/x/net v0.51.0 // indirect
-	golang.org/x/sys v0.42.0 // indirect
+	golang.org/x/net v0.47.0 // indirect
+	golang.org/x/sys v0.41.0 // indirect
 	golang.org/x/text v0.34.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260226221140-a57be14db171 // indirect
-	google.golang.org/grpc v1.81.1 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20251029180050-ab9386a59fda // indirect
+	google.golang.org/grpc v1.79.0-dev // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
