@@ -1,45 +1,42 @@
 # provider-github
 
-GitHub release provider plugin for SemRel.
+GitHub release provider plugin for [SemRel](https://github.com/SemRels/semrel).
 
-Provides GitHub repository, release, and metadata integration for SemRel releases.
+Creates GitHub Releases, fetches commit history, and uploads release assets
+via the [GitHub REST API](https://docs.github.com/en/rest).
 
-## Documentation
+## What It Does
 
-- SemRel docs (planned): <https://github.com/SemRels/semrel/tree/main/docs/plugins/provider-github>
-- Plugin template: <https://github.com/SemRels/plugin-template>
-- Registry: <https://registry.semrel.io>
+| RPC              | Description                                          |
+|------------------|------------------------------------------------------|
+| `GetLastRelease` | Fetches the latest published GitHub Release and tag SHA |
+| `GetCommitsSince`| Returns commits between a SHA and HEAD on the release branch |
+| `CreateRelease`  | Creates a new GitHub Release (supports dry-run)      |
+| `UploadAsset`    | Uploads a release artifact to an existing release    |
 
-## Repository Layout
+## Configuration (`.semrel.yaml`)
 
-~~~text
-cmd/plugin/              Plugin entry point
-internal/plugin/         Business logic scaffold
-internal/grpc/           gRPC transport scaffold
-proto/v1                 Symlink to the SemRel protobuf contract
-.github/workflows/       CI, release, and security automation
-~~~
-
-## Development
-
-~~~bash
-go build ./cmd/plugin
-go test ./...
-~~~
-
-## Configuration Example
-
-~~~yaml
+```yaml
 plugins:
   - name: provider-github
     type: provider
     config:
-      api_url: https://api.github.com
-      owner: SemRels
-      repository: example-repo
-      token: ${GITHUB_TOKEN}
-~~~
+      github_token: ${GITHUB_TOKEN}  # optional; falls back to GITHUB_TOKEN/GH_TOKEN env vars
+```
 
-## Status
+## Required Permissions
 
-This repository is bootstrapped from SemRels/plugin-template and is ready for implementation.
+The `GITHUB_TOKEN` (or `GH_TOKEN`) must have:
+- `contents: write` — to create tags and releases
+
+## Development
+
+```bash
+go test ./...
+go build ./cmd/plugin
+```
+
+## License
+
+Apache-2.0 — see [LICENSE](LICENSE).
+

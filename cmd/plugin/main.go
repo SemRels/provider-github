@@ -1,26 +1,23 @@
 // SPDX-License-Identifier: Apache-2.0
-// SPDX-FileCopyrightText: 2026 The plugin-template Authors
+// SPDX-FileCopyrightText: 2026 The SemRels Authors
 
 package main
 
 import (
-	"context"
-	"log"
-	"os"
-
-	grpcserver "github.com/SemRels/provider-github/internal/grpc"
-	semrelplugin "github.com/SemRels/provider-github/internal/plugin"
+	semrelapi "github.com/SemRels/semrel-api/plugin"
+	providerplugin "github.com/SemRels/provider-github/internal/plugin"
+	"github.com/hashicorp/go-plugin"
 )
 
 func main() {
-	provider := semrelplugin.NewProvider("provider-github")
-	server := grpcserver.NewProviderServer(provider)
-
-	if _, err := server.Health(context.Background()); err != nil {
-		log.Printf("plugin health check failed: %v", err)
-		os.Exit(1)
-	}
-
-	log.Printf("%s plugin template is ready", provider.Name())
+	plugin.Serve(&plugin.ServeConfig{
+		HandshakeConfig: semrelapi.HandshakeConfig,
+		Plugins: map[string]plugin.Plugin{
+			"provider": &semrelapi.ProviderGRPCPlugin{
+				Impl: providerplugin.New(),
+			},
+		},
+		GRPCServer: plugin.DefaultGRPCServer,
+	})
 }
 
