@@ -94,10 +94,8 @@ func (p *Provider) GetCommitsSince(ctx context.Context, req *semrelv1.GetCommits
 		SHA: rctx.GetBranch(),
 		ListOptions: github.ListOptions{PerPage: 250},
 	}
-	if req.GetSinceSha() != "" {
-		// GitHub list commits supports "since" as a timestamp only, not a SHA.
-		// We fetch with pagination and stop at the known SHA instead.
-	}
+	// GitHub's ListCommits supports "since" as a timestamp only, not a SHA.
+	// sinceSHA filtering is handled below: we stop when we encounter the known SHA.
 
 	var allCommits []*semrelv1.Commit
 	for {
@@ -176,7 +174,7 @@ func (p *Provider) UploadAsset(ctx context.Context, req *semrelv1.UploadAssetReq
 	if err != nil {
 		return nil, fmt.Errorf("open asset %q: %w", req.GetAssetPath(), err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	contentType := req.GetContentType()
 	if contentType == "" {

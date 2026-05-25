@@ -44,7 +44,7 @@ func TestGetLastRelease_NoRelease(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v3/repos/SemRels/myrepo/releases/latest", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprint(w, `{"message":"Not Found"}`)
+		fmt.Fprint(w, `{"message":"Not Found"}`) //nolint:errcheck
 	})
 
 	_, client := newTestServer(t, mux)
@@ -60,13 +60,13 @@ func TestGetLastRelease_WithRelease(t *testing.T) {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v3/repos/SemRels/myrepo/releases/latest", func(w http.ResponseWriter, _ *http.Request) {
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"tag_name": "v1.2.3",
 			"html_url": "https://github.com/SemRels/myrepo/releases/tag/v1.2.3",
 		})
 	})
 	mux.HandleFunc("/api/v3/repos/SemRels/myrepo/git/ref/tags/v1.2.3", func(w http.ResponseWriter, _ *http.Request) {
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"ref": "refs/tags/v1.2.3",
 			"object": map[string]string{"sha": "abc123", "type": "commit"},
 		})
