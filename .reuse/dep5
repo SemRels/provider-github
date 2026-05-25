@@ -1,0 +1,44 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: {{PROJECT_NAME}}
+Upstream-Contact: The {{PROJECT_NAME}} Authors <https://github.com/{{ORG_NAME}}/{{REPO_NAME}}>
+Source: {{REPO_URL}}
+
+# ----------------------------------------------------------------------------
+# Documentation and community health files
+# ----------------------------------------------------------------------------
+Files: *.md
+ .github/**/*.md
+Copyright: {{COPYRIGHT_YEAR}} The {{PROJECT_NAME}} Authors
+License: Apache-2.0
+
+# ----------------------------------------------------------------------------
+# Build and tooling configuration
+# ----------------------------------------------------------------------------
+Files: Makefile
+ Makefile.template
+ Dockerfile
+ go.mod
+ go.sum
+ .golangci.yml
+ *.template
+ .gitignore
+ .gitignore.template
+ .github/**/*.yml
+ .github/**/*.yaml
+ .github/**/*.json
+ .github/**/*.template
+ .reuse/dep5
+ cmd/**/*.go
+ internal/**/*.go
+ proto/**
+Copyright: {{COPYRIGHT_YEAR}} The {{PROJECT_NAME}} Authors
+License: Apache-2.0
+
+# ----------------------------------------------------------------------------
+# Legal files (not covered by a license themselves)
+# ----------------------------------------------------------------------------
+Files: LICENSE
+ LICENSES/Apache-2.0.txt
+ NOTICE
+Copyright: {{COPYRIGHT_YEAR}} The {{PROJECT_NAME}} Authors
+License: Apache-2.0

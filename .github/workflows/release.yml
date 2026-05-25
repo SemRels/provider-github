@@ -1,0 +1,124 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    if: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' }}
+    name: Build ${{ matrix.goos }}-${{ matrix.goarch }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            ext: ''
+          - goos: linux
+            goarch: arm64
+            ext: ''
+          - goos: darwin
+            goarch: amd64
+            ext: ''
+          - goos: darwin
+            goarch: arm64
+            ext: ''
+          - goos: windows
+            goarch: amd64
+            ext: '.exe'
+          - goos: windows
+            goarch: arm64
+            ext: '.exe'
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build release binary
+        shell: bash
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: '0'
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          binary="plugin-${GOOS}-${GOARCH}${{ matrix.ext }}"
+          go build -trimpath -ldflags='-s -w' -o "dist/${binary}" ./cmd/plugin
+          sha256sum "dist/${binary}" > "dist/${binary}.sha256"
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    if: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' }}
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Generate checksum manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          find dist -maxdepth 1 -type f ! -name '*.sha256' -printf '%f\n' | sort | while read -r file; do
+            sha256sum "dist/${file}"
+          done > dist/checksums.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          name: ${{ github.ref_name }}
+
+      - name: Trigger registry sync
+        shell: bash
+        env:
+          REGISTRY_SYNC_TOKEN: ${{ secrets.REGISTRY_SYNC_TOKEN }}
+          REGISTRY_SYNC_WEBHOOK: ${{ secrets.REGISTRY_SYNC_WEBHOOK }}
+          PLUGIN_OWNER: ${{ github.repository_owner }}
+          PLUGIN_REPO: ${{ github.event.repository.name }}
+          PLUGIN_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [ -n "${REGISTRY_SYNC_TOKEN}" ]; then
+            payload=$(printf '{"event_type":"sync-plugins","client_payload":{"source_owner":"%s","source_repo":"%s","tag":"%s"}}' "${PLUGIN_OWNER}" "${PLUGIN_REPO}" "${PLUGIN_TAG}")
+            curl --fail --silent --show-error \
+              -X POST \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${REGISTRY_SYNC_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              https://api.github.com/repos/SemRels/semrel-registry/dispatches \
+              -d "${payload}"
+          elif [ -n "${REGISTRY_SYNC_WEBHOOK}" ]; then
+            payload=$(printf '{"repository":"%s","owner":"%s","tag":"%s"}' "${PLUGIN_REPO}" "${PLUGIN_OWNER}" "${PLUGIN_TAG}")
+            curl --fail --silent --show-error \
+              -X POST \
+              -H "Content-Type: application/json" \
+              "${REGISTRY_SYNC_WEBHOOK}" \
+              -d "${payload}"
+          else
+            echo "No registry sync secret configured; skipping dispatch."
+          fi

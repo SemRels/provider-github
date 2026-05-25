@@ -1,0 +1,38 @@
+name: Bug Report
+description: Report a bug in {{PROJECT_NAME}}
+labels: ["type: bug", "needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting a bug. For security vulnerabilities, use private reporting via {{SECURITY_ADVISORY_URL}}.
+  - type: input
+    id: version
+    attributes:
+      label: Affected version
+      placeholder: e.g. v0.1.0 or commit SHA
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      placeholder: OS, runtime, tool versions

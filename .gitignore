@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 The plugin-template Authors
+
+# Operating system files
+.DS_Store
+Thumbs.db
+
+# Editors
+.idea/
+.vscode/
+*.swp
+
+# Logs and coverage
+*.log
+coverage.out
+coverage.html
+*.out
+
+# Build outputs
+bin/
+dist/
+build/
+
+# Go
+*.test
+
+# Docker
+.docker/
