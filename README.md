@@ -1,4 +1,4 @@
-﻿# provider-github
+# provider-github
 
 GitHub release provider plugin for SemRel.
 
@@ -12,24 +12,24 @@ Provides GitHub repository, release, and metadata integration for SemRel release
 
 ## Repository Layout
 
-`	ext
+~~~text
 cmd/plugin/              Plugin entry point
 internal/plugin/         Business logic scaffold
 internal/grpc/           gRPC transport scaffold
 proto/v1                 Symlink to the SemRel protobuf contract
 .github/workflows/       CI, release, and security automation
-`
+~~~
 
 ## Development
 
-`ash
+~~~bash
 go build ./cmd/plugin
 go test ./...
-`
+~~~
 
 ## Configuration Example
 
-`yaml
+~~~yaml
 plugins:
   - name: provider-github
     type: provider
@@ -38,7 +38,7 @@ plugins:
       owner: SemRels
       repository: example-repo
       token: ${GITHUB_TOKEN}
-`
+~~~
 
 ## Status
 
