@@ -1,13 +1,14 @@
-# provider-github
+﻿# provider-github
 
-GitHub provider plugin for Semantic Release.
+GitHub release provider plugin for SemRel.
 
-Provides GitHub repository, release, and metadata integration for Semantic Release.
+Provides GitHub repository, release, and metadata integration for SemRel releases.
 
 ## Documentation
 
-- Docs (coming soon): <https://github.com/SemRels/semrel/tree/main/docs/plugins/provider-github>
-- Template source: <https://github.com/SemRels/plugin-template>
+- SemRel docs (planned): <https://github.com/SemRels/semrel/tree/main/docs/plugins/provider-github>
+- Plugin template: <https://github.com/SemRels/plugin-template>
+- Registry: <https://registry.semrel.io>
 
 ## Repository Layout
 
