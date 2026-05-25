@@ -1,4 +1,4 @@
-﻿module github.com/SemRels/provider-github
+module github.com/SemRels/provider-github
 
 go 1.24
 

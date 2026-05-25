@@ -1,4 +1,4 @@
-﻿# provider-github
+# provider-github
 
 GitHub provider plugin for Semantic Release.
 
