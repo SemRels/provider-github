@@ -1,5 +1,5 @@
-github.com/SemRels/semrel-api v0.1.1 h1:d/gGlKlQI4Y/2a7Nvl8LlIRz2XPb3v/YyN8ELF6Pzdw=
-github.com/SemRels/semrel-api v0.1.1/go.mod h1:ePdCPHvWUwVdukyPVZAhYQt0aMV4IR8WKuG/Zzjb9Rw=
+github.com/SemRels/semrel-api v0.1.2 h1:kv+6VFaeFx7rTCEQtDZ76MKHx2YzElg9aQZsHbJeisM=
+github.com/SemRels/semrel-api v0.1.2/go.mod h1:7ySfCaMb1MuqShgKxPW3Uo5938b8ItOmOaeJqY8OGU8=
 github.com/bufbuild/protocompile v0.14.1 h1:iA73zAf/fyljNjQKwYzUHD6AD4R8KMasmwa/FBatYVw=
 github.com/bufbuild/protocompile v0.14.1/go.mod h1:ppVdAIhbr2H8asPk6k4pY7t9zB1OU5DoEw9xY/FUi1c=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=
