@@ -1,6 +1,6 @@
 module github.com/SemRels/provider-github
 
-go 1.26.3
+go 1.24.0
 
 require (
 	github.com/SemRels/semrel-api v0.1.2
