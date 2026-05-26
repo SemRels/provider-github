@@ -1,63 +1,55 @@
 # provider-github
 
-`provider-github` is a SemRel subprocess plugin that creates GitHub releases with the REST API. It reads SemRel release context from environment variables, performs a single `POST /repos/{owner}/{repo}/releases`, and exits with a normal process status code.
+Publishes the semrel release to GitHub Releases.
 
-## Features
+This plugin is distributed as the standalone Go binary `semrel-plugin-provider-github`. Semrel executes the binary as a subprocess, provides plugin configuration through `SEMREL_PLUGIN_*` environment variables, provides release context through `SEMREL_*` environment variables, reads standard output, and treats exit code `0` as success and any non-zero exit code as failure. Install the binary in `~/.semrel/plugins/` or anywhere on your `$PATH`.
 
-- No gRPC transport
-- No `hashicorp/go-plugin`
-- Token lookup from `SEMREL_PLUGIN_TOKEN` with `GITHUB_TOKEN` fallback
-- Repository lookup from `SEMREL_PLUGIN_OWNER` / `SEMREL_PLUGIN_REPO` with `GITHUB_REPOSITORY` fallback
-- Dry-run support via `SEMREL_DRY_RUN`
-- Optional GitHub Enterprise or test base URL override via `SEMREL_PLUGIN_BASE_URL`
+## Installation
 
-## Environment variables
-
-### Required release context
-
-- `SEMREL_TAG_NAME`, `SEMREL_NEXT_VERSION`, or `SEMREL_VERSION`
-- `SEMREL_PLUGIN_OWNER` and `SEMREL_PLUGIN_REPO`, or `GITHUB_REPOSITORY=owner/repo`
-- `SEMREL_PLUGIN_TOKEN` or `GITHUB_TOKEN` unless `SEMREL_DRY_RUN=true`
-
-### Optional plugin settings
-
-- `SEMREL_CHANGELOG`: release notes body
-- `SEMREL_PLUGIN_NAME`: release title (defaults to the tag)
-- `SEMREL_PLUGIN_DRAFT`: `true` to create a draft release
-- `SEMREL_PLUGIN_PRERELEASE`: `true` to force the prerelease flag
-- `SEMREL_PLUGIN_BASE_URL`: defaults to `https://api.github.com`
-
-## Example
-
-```powershell
-$env:SEMREL_PLUGIN_TOKEN = "ghp_xxx"
-$env:GITHUB_REPOSITORY = "SemRels/semrel"
-$env:SEMREL_TAG_NAME = "v1.2.3"
-$env:SEMREL_CHANGELOG = "## What's Changed"
-go run ./cmd/plugin
+```bash
+go install github.com/SemRels/provider-github/cmd/plugin@latest
 ```
 
-## Exit behavior
+## Configuration
 
-- Exit code `0`: release created successfully, or dry-run completed
-- Exit code `1`: configuration or GitHub API failure
-
-## Building
-
-```powershell
-go build ./...
-make build
+```yaml
+plugins:
+  - name: provider-github
+    path: ~/.semrel/plugins/semrel-plugin-provider-github
+    env:
+      SEMREL_PLUGIN_TOKEN: "${GITHUB_TOKEN}"
+      SEMREL_PLUGIN_OWNER: "SemRels"
+      SEMREL_PLUGIN_REPO: "provider-github"
+      SEMREL_PLUGIN_DRAFT: "false"
+      SEMREL_PLUGIN_PRERELEASE: "false"
+      SEMREL_PLUGIN_ASSET_GLOB: "dist/*"
 ```
 
-## Testing
+## `SEMREL_PLUGIN_*` variables
 
-```powershell
-go test ./... -coverprofile=coverage.out
-```
+| Name | Required | Description | Default |
+| --- | --- | --- | --- |
+| `SEMREL_PLUGIN_TOKEN` | Required | GitHub token with `repo` scope. | None |
+| `SEMREL_PLUGIN_OWNER` | Optional | Repository owner. Defaults from the git remote when available. | Derived from git remote |
+| `SEMREL_PLUGIN_REPO` | Optional | Repository name. Defaults from the git remote when available. | Derived from git remote |
+| `SEMREL_PLUGIN_DRAFT` | Optional | Create the release as a draft. | false |
+| `SEMREL_PLUGIN_PRERELEASE` | Optional | Mark the release as a prerelease. | false |
+| `SEMREL_PLUGIN_ASSET_GLOB` | Optional | Glob pattern used to upload release assets. | None |
 
-Tests use `httptest.NewServer` for the GitHub API and cover the subprocess entrypoint separately.
+## `SEMREL_*` release context used
 
-## Development notes
+| Variable | Description |
+| --- | --- |
+| `SEMREL_VERSION` | Resolved release version for the current run. |
+| `SEMREL_TAG_NAME` | Git tag name semrel will create or publish. |
+| `SEMREL_NEXT_VERSION` | Next version computed by semrel for the release. |
+| `SEMREL_CHANGELOG` | Generated changelog text for the release. |
+| `SEMREL_DRY_RUN` | Whether semrel is running in dry-run mode. |
 
-- Module path remains `github.com/SemRels/provider-github`
-- Minimum Go version is `1.25`
+## Example behavior
+
+The plugin creates a GitHub release for the current tag, publishes the changelog as release notes, and can upload matching assets.
+
+## License
+
+Apache-2.0
