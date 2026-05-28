@@ -4,7 +4,7 @@
 # semrel-release — uses semrel to version this plugin.
 # Flow: push to main → semrel creates tag → release.yml builds binaries + publishes release
 #
-# condition-github-actions is installed from its published v0.1.0 release.
+# condition-github-actions is built from source until its binary releases are stable.
 name: Semrel Release
 
 on:
@@ -51,20 +51,18 @@ jobs:
           chmod +x /tmp/semrel
           echo "semrel $(/tmp/semrel version)"
 
-      - name: Install condition-github-actions plugin
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install plugins from source
+        # Build condition-github-actions from source (main branch) until binary
+        # releases use the subprocess interface expected by semrel's plugin runner.
+        # See: semrel/.semrel.yaml comment about plugin sourcing strategy.
         run: |
           set -euo pipefail
           PLUGIN_DIR="$HOME/.semrel/plugins"
           mkdir -p "$PLUGIN_DIR"
-          # Use the published v0.1.0 release binary (linux/amd64 in CI)
-          gh release download v0.1.0 \
-            --repo SemRels/condition-github-actions \
-            --pattern "plugin-linux-amd64" \
-            --dir "$PLUGIN_DIR"
-          mv "$PLUGIN_DIR/plugin-linux-amd64" "$PLUGIN_DIR/semrel-plugin-condition-github-actions"
-          chmod +x "$PLUGIN_DIR/semrel-plugin-condition-github-actions"
+          go install github.com/SemRels/condition-github-actions/cmd/plugin@main
+          mv "$(go env GOPATH)/bin/plugin" "$PLUGIN_DIR/semrel-plugin-condition-github-actions"
+          echo "Installed plugins:"
+          ls -la "$PLUGIN_DIR"
 
       - name: Configure git identity
         run: |
