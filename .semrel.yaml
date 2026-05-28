@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 The semrel Authors
+#
+# semrel uses itself to manage this plugin's releases.
+# version_ceiling keeps releases in 0.x.x until deliberately promoted to 1.0.0.
+# To release 1.0.0: remove version_ceiling and commit.
+
+tagPrefix: "v"
+version_ceiling: "1.0.0"
+ceiling_strategy: clamp
+commit_changelog: false
+tag_exists_strategy: update-changelog
+
+branches:
+  - name: main
+
+plugins:
+  # condition-github-actions verifies we are running inside a legitimate
+  # GitHub Actions CI environment before any git work is done.
+  - uses: condition-github-actions
+    phase: condition
