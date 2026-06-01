@@ -1,4 +1,4 @@
-# Contributing to {{PROJECT_NAME}}
+# Contributing to provider-github
 
 Thank you for your interest in contributing.
 
@@ -11,11 +11,11 @@ Thank you for your interest in contributing.
 ## Workflow
 
 1. Fork the repository and clone it locally
-2. Create a topic branch from `{{DEFAULT_BRANCH}}`
+2. Create a topic branch from `main`
 3. Keep changes focused and easy to review
 4. Run the relevant tests, lint checks, and build steps for the repo type
 5. Update docs when behavior, APIs, or contributor workflow changes
-6. Open a pull request against `{{DEFAULT_BRANCH}}`
+6. Open a pull request against `main`
 
 ## Commit Messages
 
