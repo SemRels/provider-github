@@ -9,8 +9,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -29,12 +32,14 @@ type Config struct {
 	Draft      bool
 	Prerelease bool
 	DryRun     bool
+	Assets     string
 }
 
 // Release is the minimal GitHub release response used by the subprocess entrypoint.
 type Release struct {
-	ID  int64
-	URL string
+	ID        int64
+	URL       string
+	UploadURL string
 }
 
 // Creator creates GitHub releases.
@@ -90,6 +95,7 @@ func ConfigFromEnv(getenv func(string) string) (Config, error) {
 		Draft:      parseBoolValue(getenv("SEMREL_PLUGIN_DRAFT")),
 		Prerelease: prerelease,
 		DryRun:     parseBoolValue(getenv("SEMREL_DRY_RUN")),
+		Assets:     getenv("SEMREL_PLUGIN_ASSETS"),
 	}
 
 	if err := validateConfig(cfg); err != nil {
@@ -101,6 +107,15 @@ func ConfigFromEnv(getenv func(string) string) (Config, error) {
 // CreateRelease uses the default HTTP client to create a GitHub release.
 func CreateRelease(ctx context.Context, cfg Config) (*Release, error) {
 	return New(nil).CreateRelease(ctx, cfg)
+}
+
+// UploadReleaseAssets uploads any configured assets for the provided release.
+func UploadReleaseAssets(ctx context.Context, cfg Config, release *Release, stderr io.Writer) {
+	defaultHTTPClient().UploadReleaseAssets(ctx, cfg, release, stderr)
+}
+
+func defaultHTTPClient() *client {
+	return &client{httpClient: &http.Client{Timeout: 30 * time.Second}}
 }
 
 func (c *client) CreateRelease(ctx context.Context, cfg Config) (*Release, error) {
@@ -146,13 +161,7 @@ func (c *client) CreateRelease(ctx context.Context, cfg Config) (*Release, error
 	if err != nil {
 		return nil, fmt.Errorf("build release request: %w", err)
 	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("Authorization", "Bearer "+cfg.Token)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "provider-github")
-	if baseURL.Host == "api.github.com" {
-		req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
-	}
+	setGitHubHeaders(req, cfg.Token, "application/json", baseURL)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -169,14 +178,161 @@ func (c *client) CreateRelease(ctx context.Context, cfg Config) (*Release, error
 	}
 
 	var parsed struct {
-		ID      int64  `json:"id"`
-		HTMLURL string `json:"html_url"`
+		ID        int64  `json:"id"`
+		HTMLURL   string `json:"html_url"`
+		UploadURL string `json:"upload_url"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
 		return nil, fmt.Errorf("decode release response: %w", err)
 	}
 
-	return &Release{ID: parsed.ID, URL: parsed.HTMLURL}, nil
+	return &Release{ID: parsed.ID, URL: parsed.HTMLURL, UploadURL: parsed.UploadURL}, nil
+}
+
+func (c *client) UploadReleaseAssets(ctx context.Context, cfg Config, release *Release, stderr io.Writer) {
+	if cfg.DryRun || strings.TrimSpace(cfg.Assets) == "" || release == nil {
+		return
+	}
+
+	seen := make(map[string]struct{})
+	for _, pattern := range splitAssets(cfg.Assets) {
+		matches, err := filepath.Glob(pattern)
+		if err != nil {
+			warnf(stderr, "asset pattern %q is invalid: %v", pattern, err)
+			continue
+		}
+		if len(matches) == 0 {
+			warnf(stderr, "asset pattern %q matched no files", pattern)
+			continue
+		}
+		for _, match := range matches {
+			cleaned := filepath.Clean(match)
+			if _, ok := seen[cleaned]; ok {
+				continue
+			}
+			seen[cleaned] = struct{}{}
+
+			info, err := os.Stat(cleaned)
+			if err != nil {
+				warnf(stderr, "cannot read asset %q: %v", cleaned, err)
+				continue
+			}
+			if info.IsDir() {
+				warnf(stderr, "asset %q is a directory", cleaned)
+				continue
+			}
+
+			if err := c.uploadReleaseAsset(ctx, cfg, release, cleaned); err != nil {
+				warnf(stderr, "failed to upload asset %q: %v", cleaned, err)
+			}
+		}
+	}
+}
+
+func (c *client) uploadReleaseAsset(ctx context.Context, cfg Config, release *Release, assetPath string) error {
+	uploadURL, baseURL, err := assetUploadURL(cfg, release, assetPath)
+	if err != nil {
+		return err
+	}
+
+	file, err := os.Open(assetPath)
+	if err != nil {
+		return fmt.Errorf("open asset: %w", err)
+	}
+	defer func() { _ = file.Close() }()
+
+	contentType := mime.TypeByExtension(filepath.Ext(assetPath))
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, uploadURL, file)
+	if err != nil {
+		return fmt.Errorf("build upload request: %w", err)
+	}
+	setGitHubHeaders(req, cfg.Token, contentType, baseURL)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("post asset: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		message := readMessage(resp.Body)
+		if message == "" {
+			message = resp.Status
+		}
+		return fmt.Errorf("upload asset failed: %s", message)
+	}
+
+	return nil
+}
+
+func assetUploadURL(cfg Config, release *Release, assetPath string) (string, *url.URL, error) {
+	baseURL, err := url.Parse(strings.TrimRight(cfg.BaseURL, "/") + "/")
+	if err != nil {
+		return "", nil, fmt.Errorf("parse github base url: %w", err)
+	}
+
+	rawURL := strings.TrimSpace(release.UploadURL)
+	if rawURL == "" {
+		baseURL = uploadBaseURL(baseURL)
+		endpoint, err := baseURL.Parse(fmt.Sprintf("repos/%s/%s/releases/%d/assets", url.PathEscape(cfg.Owner), url.PathEscape(cfg.Repo), release.ID))
+		if err != nil {
+			return "", nil, fmt.Errorf("build assets endpoint: %w", err)
+		}
+		rawURL = endpoint.String()
+	}
+
+	rawURL = strings.Split(rawURL, "{")[0]
+	endpoint, err := url.Parse(rawURL)
+	if err != nil {
+		return "", nil, fmt.Errorf("parse upload url: %w", err)
+	}
+	query := endpoint.Query()
+	query.Set("name", filepath.Base(assetPath))
+	endpoint.RawQuery = query.Encode()
+
+	return endpoint.String(), baseURL, nil
+}
+
+func uploadBaseURL(baseURL *url.URL) *url.URL {
+	uploadURL := *baseURL
+	if uploadURL.Host == "api.github.com" {
+		uploadURL.Host = "uploads.github.com"
+		uploadURL.Path = "/"
+	}
+	return &uploadURL
+}
+
+func setGitHubHeaders(req *http.Request, token string, contentType string, baseURL *url.URL) {
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", contentType)
+	req.Header.Set("User-Agent", "provider-github")
+	if baseURL != nil && baseURL.Host == "api.github.com" {
+		req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+	}
+}
+
+func splitAssets(raw string) []string {
+	parts := strings.Split(raw, ",")
+	assets := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			assets = append(assets, part)
+		}
+	}
+	return assets
+}
+
+func warnf(stderr io.Writer, format string, args ...any) {
+	if stderr == nil {
+		return
+	}
+	fmt.Fprintf(stderr, "provider-github: warning: "+format+"\n", args...)
 }
 
 func validateConfig(cfg Config) error {

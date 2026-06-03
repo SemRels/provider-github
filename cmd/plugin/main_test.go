@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 
@@ -18,6 +19,7 @@ func TestRunSuccess(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
+	uploadCalled := false
 	code := run(context.Background(), envMap(map[string]string{
 		"GITHUB_TOKEN":      "token",
 		"GITHUB_REPOSITORY": "owner/repo",
@@ -27,9 +29,14 @@ func TestRunSuccess(t *testing.T) {
 			t.Fatalf("unexpected config: %+v", cfg)
 		}
 		return &plugin.Release{ID: 42, URL: "https://github.com/owner/repo/releases/tag/v1.2.3"}, nil
+	}, func(_ context.Context, _ plugin.Config, _ *plugin.Release, _ io.Writer) {
+		uploadCalled = true
 	})
 	if code != 0 {
 		t.Fatalf("run() code = %d, want 0 (stderr=%q)", code, stderr.String())
+	}
+	if !uploadCalled {
+		t.Fatal("expected uploadAssets to be called")
 	}
 	if stderr.Len() != 0 || !strings.Contains(stdout.String(), "created v1.2.3") {
 		t.Fatalf("stdout=%q stderr=%q", stdout.String(), stderr.String())
@@ -41,18 +48,25 @@ func TestRunDryRun(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
+	uploadCalled := false
 	code := run(context.Background(), envMap(map[string]string{
-		"GITHUB_REPOSITORY":   "owner/repo",
-		"SEMREL_NEXT_VERSION": "1.2.3",
-		"SEMREL_DRY_RUN":      "true",
+		"GITHUB_REPOSITORY":    "owner/repo",
+		"SEMREL_NEXT_VERSION":  "1.2.3",
+		"SEMREL_DRY_RUN":       "true",
+		"SEMREL_PLUGIN_ASSETS": "dist/*.tar.gz",
 	}), &stdout, &stderr, func(_ context.Context, cfg plugin.Config) (*plugin.Release, error) {
 		if !cfg.DryRun || cfg.TagName != "v1.2.3" {
 			t.Fatalf("unexpected config: %+v", cfg)
 		}
 		return &plugin.Release{URL: "https://github.com/owner/repo/releases/tag/v1.2.3"}, nil
+	}, func(_ context.Context, _ plugin.Config, _ *plugin.Release, _ io.Writer) {
+		uploadCalled = true
 	})
 	if code != 0 {
 		t.Fatalf("run() code = %d, want 0 (stderr=%q)", code, stderr.String())
+	}
+	if uploadCalled {
+		t.Fatal("uploadAssets should not be called during dry-run")
 	}
 	if stderr.Len() != 0 || !strings.Contains(stdout.String(), "dry-run") {
 		t.Fatalf("stdout=%q stderr=%q", stdout.String(), stderr.String())
@@ -69,6 +83,8 @@ func TestRunConfigError(t *testing.T) {
 	}), &stdout, &stderr, func(context.Context, plugin.Config) (*plugin.Release, error) {
 		t.Fatal("createRelease should not be called")
 		return nil, nil
+	}, func(context.Context, plugin.Config, *plugin.Release, io.Writer) {
+		t.Fatal("uploadAssets should not be called")
 	})
 	if code != 1 {
 		t.Fatalf("run() code = %d, want 1", code)
@@ -89,6 +105,8 @@ func TestRunCreateReleaseError(t *testing.T) {
 		"SEMREL_TAG_NAME":   "v1.2.3",
 	}), &stdout, &stderr, func(context.Context, plugin.Config) (*plugin.Release, error) {
 		return nil, errors.New("boom")
+	}, func(context.Context, plugin.Config, *plugin.Release, io.Writer) {
+		t.Fatal("uploadAssets should not be called")
 	})
 	if code != 1 {
 		t.Fatalf("run() code = %d, want 1", code)

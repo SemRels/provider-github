@@ -22,7 +22,7 @@ plugins:
       SEMREL_PLUGIN_REPO: "provider-github"
       SEMREL_PLUGIN_DRAFT: "false"
       SEMREL_PLUGIN_PRERELEASE: "false"
-      SEMREL_PLUGIN_ASSET_GLOB: "dist/*"
+      SEMREL_PLUGIN_ASSETS: "dist/*.tar.gz,dist/*.zip,build/myapp"
 ```
 
 ## `SEMREL_PLUGIN_*` variables
@@ -34,7 +34,7 @@ plugins:
 | `SEMREL_PLUGIN_REPO` | Optional | Repository name. Defaults from the git remote when available. | Derived from git remote |
 | `SEMREL_PLUGIN_DRAFT` | Optional | Create the release as a draft. | false |
 | `SEMREL_PLUGIN_PRERELEASE` | Optional | Mark the release as a prerelease. | false |
-| `SEMREL_PLUGIN_ASSET_GLOB` | Optional | Glob pattern used to upload release assets. | None |
+| `SEMREL_PLUGIN_ASSETS` | Optional | Comma-separated file paths or glob patterns to upload as GitHub Release assets. | None |
 
 ## `SEMREL_*` release context used
 
@@ -48,7 +48,13 @@ plugins:
 
 ## Example behavior
 
-The plugin creates a GitHub release for the current tag, publishes the changelog as release notes, and can upload matching assets.
+The plugin creates a GitHub release for the current tag, publishes the changelog as release notes, and can upload matching assets listed in `SEMREL_PLUGIN_ASSETS`.
+
+Examples:
+
+```bash
+SEMREL_PLUGIN_ASSETS=dist/*.tar.gz,dist/*.zip,build/myapp
+```
 
 ## License
 

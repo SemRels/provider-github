@@ -13,7 +13,14 @@ import (
 	plugin "github.com/SemRels/provider-github/internal/plugin"
 )
 
-func run(ctx context.Context, getenv func(string) string, stdout, stderr io.Writer, createRelease func(context.Context, plugin.Config) (*plugin.Release, error)) int {
+func run(
+	ctx context.Context,
+	getenv func(string) string,
+	stdout io.Writer,
+	stderr io.Writer,
+	createRelease func(context.Context, plugin.Config) (*plugin.Release, error),
+	uploadAssets func(context.Context, plugin.Config, *plugin.Release, io.Writer),
+) int {
 	cfg, err := plugin.ConfigFromEnv(getenv)
 	if err != nil {
 		fmt.Fprintln(stderr, "provider-github:", err)
@@ -31,6 +38,7 @@ func run(ctx context.Context, getenv func(string) string, stdout, stderr io.Writ
 		return 0
 	}
 
+	uploadAssets(ctx, cfg, release, stderr)
 	fmt.Fprintf(stdout, "provider-github: created %s for %s/%s (id=%d) %s\n", cfg.TagName, cfg.Owner, cfg.Repo, release.ID, release.URL)
 	return 0
 }
@@ -38,5 +46,5 @@ func run(ctx context.Context, getenv func(string) string, stdout, stderr io.Writ
 func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	os.Exit(run(ctx, os.Getenv, os.Stdout, os.Stderr, plugin.CreateRelease))
+	os.Exit(run(ctx, os.Getenv, os.Stdout, os.Stderr, plugin.CreateRelease, plugin.UploadReleaseAssets))
 }
