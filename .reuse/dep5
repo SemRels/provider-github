@@ -42,3 +42,8 @@ Files: LICENSE
  NOTICE
 Copyright: {{COPYRIGHT_YEAR}} The {{PROJECT_NAME}} Authors
 License: Apache-2.0
+
+# JSON Schema files
+Files: schema/*.json
+Copyright: The provider-github Authors
+License: Apache-2.0
