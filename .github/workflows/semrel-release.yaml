@@ -18,6 +18,7 @@ concurrency:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   release:
@@ -49,7 +50,7 @@ jobs:
             --pattern "semrel_*_linux_amd64.tar.gz" --dir /tmp
           tar -xzf /tmp/semrel_*_linux_amd64.tar.gz -C /tmp
           chmod +x /tmp/semrel
-          echo "semrel $(/tmp/semrel version)"
+          echo "semrel $(/tmp/semrel --version 2>/dev/null || /tmp/semrel version 2>/dev/null || echo installed)"
 
       - name: Install plugins from source
         # Build condition-github-actions from source (main branch) until binary
