@@ -87,6 +87,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Trigger binary build
+        if: steps.semrel.outputs.released == 'true'
+        run: |
+          TAG="${{ steps.semrel.outputs.tag }}"
+          echo "Triggering release.yml for tag $TAG"
+          gh workflow run release.yml --ref "$TAG" --repo "${{ github.repository }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Summary
         run: |
           if [ "${{ steps.semrel.outputs.released }}" = "true" ]; then
