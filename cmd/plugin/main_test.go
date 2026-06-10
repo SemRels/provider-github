@@ -38,7 +38,7 @@ func TestRunSuccess(t *testing.T) {
 	if !uploadCalled {
 		t.Fatal("expected uploadAssets to be called")
 	}
-	if stderr.Len() != 0 || !strings.Contains(stdout.String(), "created v1.2.3") {
+	if stderr.String() != "plugin_schema_version=1\n" || !strings.Contains(stdout.String(), "created v1.2.3") {
 		t.Fatalf("stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}
 }
@@ -68,7 +68,7 @@ func TestRunDryRun(t *testing.T) {
 	if uploadCalled {
 		t.Fatal("uploadAssets should not be called during dry-run")
 	}
-	if stderr.Len() != 0 || !strings.Contains(stdout.String(), "dry-run") {
+	if stderr.String() != "plugin_schema_version=1\n" || !strings.Contains(stdout.String(), "dry-run") {
 		t.Fatalf("stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}
 }
