@@ -23,7 +23,7 @@ func run(
 	createRelease func(context.Context, plugin.Config) (*plugin.Release, error),
 	uploadAssets func(context.Context, plugin.Config, *plugin.Release, io.Writer),
 ) int {
-	fmt.Fprintf(stderr, "plugin_schema_version=%d\n", pluginSchemaVersion)
+	_, _ = fmt.Fprintf(stderr, "plugin_schema_version=%d\n", pluginSchemaVersion)
 	cfg, err := plugin.ConfigFromEnv(getenv)
 	if err != nil {
 		fmt.Fprintln(stderr, "provider-github:", err)
