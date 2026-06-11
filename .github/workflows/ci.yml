@@ -20,10 +20,10 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version: "${{ matrix.go }}.x"
           cache: true
@@ -33,7 +33,7 @@ jobs:
 
       - name: Run golangci-lint
         continue-on-error: true
-        uses: golangci/golangci-lint-action@v9
+        uses: golangci/golangci-lint-action@82606bf257cbaff209d206a39f5134f0cfbfd2ee # v9
         with:
           version: v2.1.6
 
@@ -55,7 +55,7 @@ jobs:
         run: go build -v ./cmd/plugin
 
       - name: Run Trivy filesystem scan
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: fs
           scan-ref: .
