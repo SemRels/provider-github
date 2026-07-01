@@ -327,9 +327,18 @@ func TestUploadReleaseAssetsExpandsGlobs(t *testing.T) {
 		if got := r.URL.Query().Get("name"); got == "" {
 			t.Fatal("missing asset name query")
 		}
+		// GitHub's real asset-upload endpoint requires an explicit
+		// Content-Length and rejects chunked transfer encoding, so guard
+		// against regressing to an *os.File body without a set length.
+		if r.ContentLength < 0 {
+			t.Fatalf("ContentLength = %d, want a non-negative explicit length (chunked transfer encoding not allowed)", r.ContentLength)
+		}
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			t.Fatalf("ReadAll() error = %v", err)
+		}
+		if int64(len(body)) != r.ContentLength {
+			t.Fatalf("body length = %d, Content-Length header = %d", len(body), r.ContentLength)
 		}
 		uploaded <- r.URL.Query().Get("name") + ":" + string(body)
 		w.WriteHeader(http.StatusCreated)
