@@ -1,6 +1,6 @@
 # provider-github
 
-[![Latest Release](https://img.shields.io/github/v/release/SemRels/provider-github?label=version\&color=blue)](https://github.com/SemRels/provider-github/releases/latest)
+[![Latest Release](https://img.shields.io/github/v/release/SemRels/provider-github?label=version&color=blue)](https://github.com/SemRels/provider-github/releases/latest)
 
 Publishes the semrel release to GitHub Releases.
 
