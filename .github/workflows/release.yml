@@ -204,7 +204,7 @@ jobs:
             ghcr.io/${{ github.repository }}@${{ steps.build.outputs.digest }}
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@6e7b7d1fd3e4fef0c5fa8cce1229c54b2c9bd0d8 # v0.30.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.30.0
         with:
           image-ref: ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version_short }}
           format: table
