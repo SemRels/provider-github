@@ -241,6 +241,11 @@ func (c *client) uploadReleaseAsset(ctx context.Context, cfg Config, release *Re
 	}
 	defer func() { _ = file.Close() }()
 
+	stat, err := file.Stat()
+	if err != nil {
+		return fmt.Errorf("stat asset: %w", err)
+	}
+
 	contentType := mime.TypeByExtension(filepath.Ext(assetPath))
 	if contentType == "" {
 		contentType = "application/octet-stream"
@@ -250,6 +255,10 @@ func (c *client) uploadReleaseAsset(ctx context.Context, cfg Config, release *Re
 	if err != nil {
 		return fmt.Errorf("build upload request: %w", err)
 	}
+	// GitHub's asset-upload endpoint requires an explicit Content-Length and
+	// rejects chunked transfer encoding. http.NewRequest does not infer the
+	// length for an *os.File body, so it must be set manually.
+	req.ContentLength = stat.Size()
 	setGitHubHeaders(req, cfg.Token, contentType, baseURL)
 
 	resp, err := c.httpClient.Do(req)
