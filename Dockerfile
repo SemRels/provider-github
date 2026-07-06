@@ -2,8 +2,6 @@
 # SPDX-FileCopyrightText: 2026 The provider-github Authors
 
 # ── build stage ────────────────────────────────────────────────────────────────
-# Use BUILDPLATFORM so cross-compilation happens on the native runner (fast).
-# TARGETOS/TARGETARCH are injected by buildx for each platform slice.
 FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS build
 
 ARG TARGETOS
@@ -25,10 +23,10 @@ ARG VERSION=dev
 ARG BUILD_DATE
 ARG VCS_REF
 
-LABEL org.opencontainers.image.title="semrel-plugin-provider-github" \
-      org.opencontainers.image.description="semrel plugin: provider-github" \
+LABEL org.opencontainers.image.title="semrel-plugin-plugin-template" \
+      org.opencontainers.image.description="semrel plugin template subprocess example" \
       org.opencontainers.image.url="https://semrel.io" \
-      org.opencontainers.image.source="https://github.com/SemRels/provider-github" \
+      org.opencontainers.image.source="https://github.com/SemRels/plugin-template" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.created="${BUILD_DATE}" \
       org.opencontainers.image.revision="${VCS_REF}" \
