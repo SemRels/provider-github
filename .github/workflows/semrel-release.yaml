@@ -48,7 +48,9 @@ jobs:
           VERSION=$(gh release view --repo SemRels/semrel --json tagName -q .tagName)
           gh release download "$VERSION" --repo SemRels/semrel \
             --pattern "semrel_*_linux_amd64.tar.gz" --dir /tmp
-          tar -xzf /tmp/semrel_*_linux_amd64.tar.gz -C /tmp
+          mkdir -p /tmp/semrel-dl
+          tar -xzf /tmp/semrel_*_linux_amd64.tar.gz -C /tmp/semrel-dl
+          mv /tmp/semrel-dl/semrel /tmp/semrel
           chmod +x /tmp/semrel
           echo "semrel $(/tmp/semrel --version 2>/dev/null || /tmp/semrel version 2>/dev/null || echo installed)"
 
