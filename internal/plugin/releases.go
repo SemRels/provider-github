@@ -341,7 +341,7 @@ func warnf(stderr io.Writer, format string, args ...any) {
 	if stderr == nil {
 		return
 	}
-	fmt.Fprintf(stderr, "provider-github: warning: "+format+"\n", args...)
+	_, _ = fmt.Fprintf(stderr, "provider-github: warning: "+format+"\n", args...)
 }
 
 func validateConfig(cfg Config) error {
