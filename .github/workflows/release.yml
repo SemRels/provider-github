@@ -319,13 +319,13 @@ jobs:
           sha256sum --check -- plugin-image-*.tar.sha256
           for arch in amd64 arm64; do
             archive="plugin-image-${arch}.tar"
-            source_digest=$(oras resolve --oci-layout "${archive}:${arch}")
-            platform_digest=$(oras resolve --platform "linux/${arch}" --oci-layout "${archive}:${arch}")
+            source_digest=$(oras resolve --oci-layout "${archive}:validation:${arch}")
+            platform_digest=$(oras resolve --platform "linux/${arch}" --oci-layout "${archive}:validation:${arch}")
             [[ "${source_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]
             [[ "${platform_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]
             # Registry deletion is manifest-scoped, so retain this run-scoped tag to protect the final index children.
             staging_tag="scan-${GITHUB_SHA:0:12}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${arch}"
-            oras cp --from-oci-layout "${archive}:${arch}" "${IMAGE}:${staging_tag}"
+            oras cp --from-oci-layout "${archive}:validation:${arch}" "${IMAGE}:${staging_tag}"
             pushed_digest=$(oras resolve "${IMAGE}:${staging_tag}")
             pushed_platform_digest=$(oras resolve --platform "linux/${arch}" "${IMAGE}:${staging_tag}")
             [[ "${pushed_digest}" == "${source_digest}" ]]
@@ -343,7 +343,9 @@ jobs:
           ARM64_DIGEST: ${{ steps.promote.outputs.arm64 }}
           ARM64_IMAGE_DIGEST: ${{ steps.promote.outputs.arm64_image }}
           IMAGE: ${{ needs.version.outputs.image }}
+          SOURCE_SHA: ${{ needs.version.outputs.source_sha }}
           TAGS: ${{ steps.meta.outputs.tags }}
+          VERSION: ${{ needs.version.outputs.version }}
         run: |
           set -euo pipefail
           resolve_registry_ref() {
@@ -377,33 +379,56 @@ jobs:
               "${ref}" "${attempts}" "${status}" "${output}" >&2
             return 1
           }
+          verify_exact_image() {
+            local ref=$1
+            local manifest image_config platform_digest
+            manifest=$(docker buildx imagetools inspect --raw "${ref}")
+            jq -e \
+              --arg amd64 "${AMD64_IMAGE_DIGEST}" \
+              --arg arm64 "${ARM64_IMAGE_DIGEST}" \
+              '([.manifests[] |
+                  select(.platform.os == "linux" and
+                         (.platform.architecture == "amd64" or .platform.architecture == "arm64"))] |
+                length == 2) and
+               any(.manifests[]; .digest == $amd64 and .platform.os == "linux" and .platform.architecture == "amd64") and
+               any(.manifests[]; .digest == $arm64 and .platform.os == "linux" and .platform.architecture == "arm64")' \
+              <<< "${manifest}" >/dev/null
+            for platform_digest in "${AMD64_IMAGE_DIGEST}" "${ARM64_IMAGE_DIGEST}"; do
+              image_config=$(docker buildx imagetools inspect \
+                "${IMAGE}@${platform_digest}" --format '{{json .Image}}')
+              jq -e \
+                --arg revision "${SOURCE_SHA}" \
+                --arg version "${VERSION}" \
+                '.config.Labels["org.opencontainers.image.revision"] == $revision and
+                 .config.Labels["org.opencontainers.image.version"] == $version' \
+                <<< "${image_config}" >/dev/null
+            done
+          }
           [[ "${AMD64_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]
           [[ "${AMD64_IMAGE_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]
           [[ "${ARM64_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]
           [[ "${ARM64_IMAGE_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]
+          [[ "${SOURCE_SHA}" =~ ^[0-9a-f]{40}$ ]]
           mapfile -t final_tags < <(printf '%s\n' "${TAGS}" | sed '/^[[:space:]]*$/d')
           ((${#final_tags[@]} == 1))
           exact_tag="${final_tags[0]}"
           [[ "${exact_tag}" == "${IMAGE}:"* ]]
-          candidate_tag="${IMAGE}:manifest-${GITHUB_SHA:0:12}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          docker buildx imagetools create \
-            --tag "${candidate_tag}" \
-            "${IMAGE}@${AMD64_DIGEST}" \
-            "${IMAGE}@${ARM64_DIGEST}"
-          if ! digest=$(resolve_registry_ref "${candidate_tag}"); then
-            printf 'Candidate manifest %s could not be resolved; refusing publication.\n' "${candidate_tag}" >&2
-            exit 1
-          fi
           if existing_digest=$(resolve_registry_ref "${exact_tag}"); then
-            if [[ "${existing_digest}" != "${digest}" ]]; then
-              printf 'Refusing to mutate immutable exact tag %s (%s != %s).\n' \
-                "${exact_tag}" "${existing_digest}" "${digest}" >&2
-              exit 1
-            fi
+            verify_exact_image "${exact_tag}"
+            digest="${existing_digest}"
           else
             resolve_status=$?
             if ((resolve_status != 4)); then
               exit "${resolve_status}"
+            fi
+            candidate_tag="${IMAGE}:manifest-${GITHUB_SHA:0:12}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            docker buildx imagetools create \
+              --tag "${candidate_tag}" \
+              "${IMAGE}@${AMD64_DIGEST}" \
+              "${IMAGE}@${ARM64_DIGEST}"
+            if ! digest=$(resolve_registry_ref "${candidate_tag}"); then
+              printf 'Candidate manifest %s could not be resolved; refusing publication.\n' "${candidate_tag}" >&2
+              exit 1
             fi
             oras tag "${IMAGE}@${digest}" "${exact_tag#"${IMAGE}:"}"
           fi
@@ -416,13 +441,7 @@ jobs:
               "${exact_tag}" "${published_digest}" "${digest}" >&2
             exit 1
           fi
-          docker buildx imagetools inspect --raw "${exact_tag}" |
-            jq -e \
-              --arg amd64 "${AMD64_IMAGE_DIGEST}" \
-              --arg arm64 "${ARM64_IMAGE_DIGEST}" \
-              'any(.manifests[]; .digest == $amd64 and .platform.os == "linux" and .platform.architecture == "amd64") and
-               any(.manifests[]; .digest == $arm64 and .platform.os == "linux" and .platform.architecture == "arm64")' \
-              >/dev/null
+          verify_exact_image "${exact_tag}"
           printf 'digest=%s\n' "${digest}" >> "${GITHUB_OUTPUT}"
 
       - name: Sign published image digest
@@ -471,7 +490,6 @@ jobs:
           generate_release_notes: true
           name: ${{ needs.version.outputs.tag }}
           prerelease: ${{ needs.version.outputs.stable != 'true' }}
-          make_latest: ${{ needs.version.outputs.stable == 'true' }}
 
       - name: Trigger registry sync
         shell: bash
