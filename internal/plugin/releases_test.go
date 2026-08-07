@@ -256,7 +256,7 @@ func TestUploadReleaseAssetsNoAssetsConfigured(t *testing.T) {
 }
 
 func TestUploadReleaseAssetsNoMatchesWarns(t *testing.T) {
-
+	dir := t.TempDir()
 	cwd, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("Getwd() error = %v", err)
@@ -266,7 +266,7 @@ func TestUploadReleaseAssetsNoMatchesWarns(t *testing.T) {
 			t.Fatalf("Chdir cleanup error = %v", chdirErr)
 		}
 	})
-	if err := os.Chdir(t.TempDir()); err != nil {
+	if err := os.Chdir(dir); err != nil {
 		t.Fatalf("Chdir() error = %v", err)
 	}
 

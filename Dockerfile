@@ -12,7 +12,7 @@ ARG VERSION=dev
 
 WORKDIR /src
 RUN apk add --no-cache ca-certificates git
-COPY go.mod go.sum ./
+COPY go.mod ./
 RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \

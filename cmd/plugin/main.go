@@ -26,23 +26,23 @@ func run(
 	_, _ = fmt.Fprintf(stderr, "plugin_schema_version=%d\n", pluginSchemaVersion)
 	cfg, err := plugin.ConfigFromEnv(getenv)
 	if err != nil {
-		fmt.Fprintln(stderr, "provider-github:", err)
+		_, _ = fmt.Fprintln(stderr, "provider-github:", err)
 		return 1
 	}
 
 	release, err := createRelease(ctx, cfg)
 	if err != nil {
-		fmt.Fprintln(stderr, "provider-github:", err)
+		_, _ = fmt.Fprintln(stderr, "provider-github:", err)
 		return 1
 	}
 
 	if cfg.DryRun {
-		fmt.Fprintf(stdout, "provider-github: dry-run: would create %s for %s/%s at %s\n", cfg.TagName, cfg.Owner, cfg.Repo, release.URL)
+		_, _ = fmt.Fprintf(stdout, "provider-github: dry-run: would create %s for %s/%s at %s\n", cfg.TagName, cfg.Owner, cfg.Repo, release.URL)
 		return 0
 	}
 
 	uploadAssets(ctx, cfg, release, stderr)
-	fmt.Fprintf(stdout, "provider-github: created %s for %s/%s (id=%d) %s\n", cfg.TagName, cfg.Owner, cfg.Repo, release.ID, release.URL)
+	_, _ = fmt.Fprintf(stdout, "provider-github: created %s for %s/%s (id=%d) %s\n", cfg.TagName, cfg.Owner, cfg.Repo, release.ID, release.URL)
 	return 0
 }
 

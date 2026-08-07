@@ -2,9 +2,7 @@
 # SPDX-FileCopyrightText: 2026 The semrel Authors
 #
 # semrel-release — uses semrel to version this plugin.
-# Flow: push to main → semrel creates tag → release.yml builds binaries + publishes release
-#
-# condition-github-actions is built from source until its binary releases are stable.
+# Flow: push to main → semrel creates tag → release.yml validates and publishes it.
 name: Semrel Release
 
 on:
@@ -13,7 +11,9 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: semrel-release
+  # Serialize version calculation only. Exact release.yml runs have no shared
+  # concurrency group, so a dispatched version can never occupy this slot.
+  group: semrel-orchestrator-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
@@ -26,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       released: ${{ steps.semrel.outputs.released }}
-      tag:      ${{ steps.semrel.outputs.tag }}
+      tag: ${{ steps.semrel.outputs.tag }}
     steps:
       - name: Check out repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -35,7 +35,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Go
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
           go-version: stable
           cache: false
@@ -45,65 +45,103 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          VERSION=$(gh release view --repo SemRels/semrel --json tagName -q .tagName)
-          gh release download "$VERSION" --repo SemRels/semrel \
-            --pattern "semrel_*_linux_amd64.tar.gz" --dir /tmp
-          mkdir -p /tmp/semrel-dl
-          tar -xzf /tmp/semrel_*_linux_amd64.tar.gz -C /tmp/semrel-dl
-          mv /tmp/semrel-dl/semrel /tmp/semrel
-          chmod +x /tmp/semrel
-          echo "semrel $(/tmp/semrel --version 2>/dev/null || /tmp/semrel version 2>/dev/null || echo installed)"
+          version=$(gh release view --repo SemRels/semrel --json tagName -q .tagName)
+          gh release download "${version}" --repo SemRels/semrel \
+            --pattern "semrel_*_linux_amd64.tar.gz" --dir "${RUNNER_TEMP}"
+          tar -xzf "${RUNNER_TEMP}"/semrel_*_linux_amd64.tar.gz -C "${RUNNER_TEMP}"
+          chmod +x "${RUNNER_TEMP}/semrel"
+          "${RUNNER_TEMP}/semrel" version
 
       - name: Install plugins from source
-        # Build condition-github-actions from source (main branch) until binary
-        # releases use the subprocess interface expected by semrel's plugin runner.
-        # See: semrel/.semrel.yaml comment about plugin sourcing strategy.
         run: |
           set -euo pipefail
-          PLUGIN_DIR="$HOME/.semrel/plugins"
-          mkdir -p "$PLUGIN_DIR"
-          go install github.com/SemRels/condition-github-actions/cmd/plugin@main
-          mv "$(go env GOPATH)/bin/plugin" "$PLUGIN_DIR/semrel-plugin-condition-github-actions"
-          echo "Installed plugins:"
-          ls -la "$PLUGIN_DIR"
+          plugin_dir="${HOME}/.semrel/plugins"
+          mkdir -p "${plugin_dir}"
+          go install github.com/SemRels/condition-github-actions/cmd/plugin@v0.2.2
+          mv "$(go env GOPATH)/bin/plugin" "${plugin_dir}/semrel-plugin-condition-github-actions"
 
       - name: Configure git identity
         run: |
-          git config user.name  "semrel-bot"
+          git config user.name "semrel-bot"
           git config user.email "semrel-bot@users.noreply.github.com"
 
       - name: Run semrel release
         id: semrel
-        run: /tmp/semrel release --github-output
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: "${RUNNER_TEMP}/semrel release --github-output"
 
       - name: Push tag to GitHub
         if: steps.semrel.outputs.released == 'true'
-        run: |
-          TAG="${{ steps.semrel.outputs.tag }}"
-          if git ls-remote --tags origin "$TAG" | grep -q "$TAG"; then
-            echo "Tag $TAG already exists on remote — skipping (idempotent)."
-          else
-            git push origin "refs/tags/$TAG"
-          fi
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Trigger binary build
-        if: steps.semrel.outputs.released == 'true'
+          TAG: ${{ steps.semrel.outputs.tag }}
         run: |
-          TAG="${{ steps.semrel.outputs.tag }}"
-          echo "Triggering release.yml for tag $TAG"
-          gh workflow run release.yml --ref "$TAG" --repo "${{ github.repository }}"
+          set -euo pipefail
+          if [[ "${TAG}" == *$'\r'* || "${TAG}" == *$'\n'* ]]; then
+            printf 'Tag must not contain CR or LF characters.\n' >&2
+            exit 1
+          fi
+          semver_re='^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'
+          [[ "${TAG}" =~ ${semver_re} ]] || {
+            printf 'semrel returned an invalid SemVer tag: %s\n' "${TAG}" >&2
+            exit 1
+          }
+          without_build="${TAG#v}"
+          without_build="${without_build%%+*}"
+          if [[ "${without_build}" == *-* ]]; then
+            IFS='.' read -r -a identifiers <<< "${without_build#*-}"
+            for identifier in "${identifiers[@]}"; do
+              [[ ! "${identifier}" =~ ^0[0-9]+$ ]] || {
+                printf 'Numeric prerelease identifiers must not contain leading zeros.\n' >&2
+                exit 1
+              }
+            done
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "Tag ${TAG} already exists on remote; skipping."
+          else
+            git push origin "refs/tags/${TAG}"
+          fi
+
+      - name: Trigger validated binary and image release
+        if: steps.semrel.outputs.released == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.semrel.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if [[ "${TAG}" == *$'\r'* || "${TAG}" == *$'\n'* ]]; then
+            printf 'Tag must not contain CR or LF characters.\n' >&2
+            exit 1
+          fi
+          semver_re='^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'
+          [[ "${TAG}" =~ ${semver_re} ]] || {
+            printf 'semrel returned an invalid SemVer tag: %s\n' "${TAG}" >&2
+            exit 1
+          }
+          without_build="${TAG#v}"
+          without_build="${without_build%%+*}"
+          if [[ "${without_build}" == *-* ]]; then
+            IFS='.' read -r -a identifiers <<< "${without_build#*-}"
+            for identifier in "${identifiers[@]}"; do
+              [[ ! "${identifier}" =~ ^0[0-9]+$ ]] || {
+                printf 'Numeric prerelease identifiers must not contain leading zeros.\n' >&2
+                exit 1
+              }
+            done
+          fi
+          echo "Triggering release.yml for tag ${TAG}"
+          gh workflow run release.yml --ref "${TAG}" --repo "${GITHUB_REPOSITORY}" \
+            --field "version=${TAG}"
 
       - name: Summary
+        env:
+          RELEASED: ${{ steps.semrel.outputs.released }}
+          TAG: ${{ steps.semrel.outputs.tag }}
+          BUMP: ${{ steps.semrel.outputs.bump }}
         run: |
-          if [ "${{ steps.semrel.outputs.released }}" = "true" ]; then
-            echo "### Released ${{ steps.semrel.outputs.tag }} 🚀" >> $GITHUB_STEP_SUMMARY
-            echo "**Bump:** ${{ steps.semrel.outputs.bump }}" >> $GITHUB_STEP_SUMMARY
+          if [[ "${RELEASED}" == "true" ]]; then
+            printf '### Released %s 🚀\n**Bump:** %s\n' "${TAG}" "${BUMP}" >> "${GITHUB_STEP_SUMMARY}"
           else
-            echo "### No release — no releasable commits found." >> $GITHUB_STEP_SUMMARY
+            echo "### No release — no releasable commits found." >> "${GITHUB_STEP_SUMMARY}"
           fi
