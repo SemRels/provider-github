@@ -50,7 +50,7 @@ jobs:
             --pattern "semrel_*_linux_amd64.tar.gz" --dir "${RUNNER_TEMP}"
           tar -xzf "${RUNNER_TEMP}"/semrel_*_linux_amd64.tar.gz -C "${RUNNER_TEMP}"
           chmod +x "${RUNNER_TEMP}/semrel"
-          "${RUNNER_TEMP}/semrel" version
+          "${RUNNER_TEMP}/semrel" --version
 
       - name: Install plugins from source
         run: |
