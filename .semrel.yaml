@@ -9,7 +9,6 @@
 tagPrefix: "v"
 version_ceiling: "1.0.0"
 ceiling_strategy: clamp
-commit_changelog: false
 tag_exists_strategy: update-changelog
 
 branches:
