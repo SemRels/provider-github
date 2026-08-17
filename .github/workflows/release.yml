@@ -321,13 +321,21 @@ jobs:
             archive="plugin-image-${arch}.tar"
             layout_dir=$(mktemp -d)
             tar -xf "${archive}" -C "${layout_dir}"
-            source_digest=$(oras resolve --oci-layout "${layout_dir}:validation")
-            platform_digest=$(oras resolve --platform "linux/${arch}" --oci-layout "${layout_dir}:validation")
+            # Read the layout's sole top-level entry directly from index.json
+            # instead of resolving it by tag through oras. Docker silently
+            # rewrites a bare --tag like "validation" to "validation:latest"
+            # and only records the tag component ("latest") as the OCI ref
+            # annotation, which made oras' "<path>:<tag>" ref parsing unable
+            # to find a match — jq sidesteps that ambiguity entirely.
+            source_digest=$(jq -r '.manifests[0].digest' "${layout_dir}/index.json")
             [[ "${source_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]
+            platform_digest=$(jq -r --arg arch "${arch}" \
+              '.manifests[] | select(.platform.architecture == $arch and .platform.os == "linux") | .digest' \
+              "${layout_dir}/blobs/sha256/${source_digest#sha256:}")
             [[ "${platform_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]
             # Registry deletion is manifest-scoped, so retain this run-scoped tag to protect the final index children.
             staging_tag="scan-${GITHUB_SHA:0:12}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${arch}"
-            oras cp --from-oci-layout "${layout_dir}:validation" "${IMAGE}:${staging_tag}"
+            oras cp --from-oci-layout "${layout_dir}@${source_digest}" "${IMAGE}:${staging_tag}"
             pushed_digest=$(oras resolve "${IMAGE}:${staging_tag}")
             pushed_platform_digest=$(oras resolve --platform "linux/${arch}" "${IMAGE}:${staging_tag}")
             [[ "${pushed_digest}" == "${source_digest}" ]]
