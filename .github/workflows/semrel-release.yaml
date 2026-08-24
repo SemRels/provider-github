@@ -52,7 +52,6 @@ jobs:
           archive=$(find "${RUNNER_TEMP}" -maxdepth 1 -type f -name "*.tar.gz" -print -quit)
           test -n "$archive"
           tar -xzf "$archive" -C "${RUNNER_TEMP}"
-tar -xzf "${RUNNER_TEMP}"/semrel_*_linux_amd64.tar.gz -C "${RUNNER_TEMP}"
           chmod +x "${RUNNER_TEMP}/semrel"
           "${RUNNER_TEMP}/semrel" --version
 
