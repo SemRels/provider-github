@@ -82,6 +82,26 @@ func TestConfigFromEnvParsesFallbacks(t *testing.T) {
 	if !cfg.Prerelease || !cfg.DryRun {
 		t.Fatalf("expected prerelease dry-run config, got %+v", cfg)
 	}
+	if !cfg.CommentOnPRs {
+		t.Fatal("expected pull request comments to be enabled by default")
+	}
+}
+
+func TestConfigFromEnvCanDisablePullRequestComments(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := ConfigFromEnv(envMap(map[string]string{
+		"GITHUB_TOKEN":                 "token",
+		"GITHUB_REPOSITORY":            "owner/repo",
+		"SEMREL_TAG_NAME":              "v1.2.3",
+		"SEMREL_PLUGIN_COMMENT_ON_PRS": "false",
+	}))
+	if err != nil {
+		t.Fatalf("ConfigFromEnv() error = %v", err)
+	}
+	if cfg.CommentOnPRs {
+		t.Fatal("expected pull request comments to be disabled")
+	}
 }
 
 func TestConfigFromEnvAllowsCommentingWithoutCommitHashes(t *testing.T) {

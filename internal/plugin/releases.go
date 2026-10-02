@@ -87,6 +87,14 @@ func ConfigFromEnv(getenv func(string) string) (Config, error) {
 	if !hasPrerelease {
 		prerelease = strings.Contains(tagName, "-")
 	}
+	commentOnPRs := true
+	if raw := strings.TrimSpace(getenv("SEMREL_PLUGIN_COMMENT_ON_PRS")); raw != "" {
+		value, ok := parseBool(raw)
+		if !ok {
+			return Config{}, fmt.Errorf("SEMREL_PLUGIN_COMMENT_ON_PRS must be a boolean")
+		}
+		commentOnPRs = value
+	}
 
 	cfg := Config{
 		Token:        strings.TrimSpace(coalesce(getenv("SEMREL_PLUGIN_TOKEN"), getenv("GITHUB_TOKEN"))),
@@ -100,7 +108,7 @@ func ConfigFromEnv(getenv func(string) string) (Config, error) {
 		Prerelease:   prerelease,
 		DryRun:       parseBoolValue(getenv("SEMREL_DRY_RUN")),
 		Assets:       getenv("SEMREL_PLUGIN_ASSETS"),
-		CommentOnPRs: parseBoolValue(getenv("SEMREL_PLUGIN_COMMENT_ON_PRS")),
+		CommentOnPRs: commentOnPRs,
 	}
 	if cfg.CommentOnPRs {
 		hashes := strings.TrimSpace(getenv("SEMREL_COMMIT_HASHES"))
