@@ -44,6 +44,7 @@ plugins:
       SEMREL_PLUGIN_DRAFT: "false"
       SEMREL_PLUGIN_PRERELEASE: "false"
       SEMREL_PLUGIN_ASSETS: "dist/*.tar.gz,dist/*.zip,build/myapp"
+      SEMREL_PLUGIN_COMMENT_ON_PRS: "true"
 ```
 
 ## `SEMREL_PLUGIN_*` variables
@@ -56,6 +57,7 @@ plugins:
 | `SEMREL_PLUGIN_DRAFT` | Optional | Create the release as a draft. | false |
 | `SEMREL_PLUGIN_PRERELEASE` | Optional | Mark the release as a prerelease. | false |
 | `SEMREL_PLUGIN_ASSETS` | Optional | Comma-separated file paths or glob patterns to upload as GitHub Release assets. | None |
+| `SEMREL_PLUGIN_COMMENT_ON_PRS` | Optional | Add an idempotent comment to pull requests included in the release. The token needs pull-request read and issue-comment write permissions. | false |
 
 ## `SEMREL_*` release context used
 
@@ -69,7 +71,7 @@ plugins:
 
 ## Example behavior
 
-The plugin creates a GitHub release for the current tag, publishes the changelog as release notes, and can upload matching assets listed in `SEMREL_PLUGIN_ASSETS`.
+The plugin creates a GitHub release for the current tag, publishes the changelog as release notes, and can upload matching assets listed in `SEMREL_PLUGIN_ASSETS`. When `SEMREL_PLUGIN_COMMENT_ON_PRS` is enabled, it finds pull requests associated with commits since the previous release and comments with a link to the new release. Re-running the same release does not duplicate comments.
 
 Examples:
 
