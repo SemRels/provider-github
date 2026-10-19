@@ -54,5 +54,5 @@ func run(
 func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	os.Exit(run(ctx, os.Getenv, os.Stdout, os.Stderr, plugin.CreateRelease, plugin.UploadReleaseAssets))
+	os.Exit(run(ctx, plugin.GetenvWithGitFallback(os.Getenv), os.Stdout, os.Stderr, plugin.CreateRelease, plugin.UploadReleaseAssets))
 }
