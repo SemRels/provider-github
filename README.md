@@ -51,15 +51,19 @@ plugins:
 
 | Name | Required | Description | Default |
 | --- | --- | --- | --- |
-| `SEMREL_PLUGIN_TOKEN` | Required | GitHub token with `repo` scope. | None |
-| `SEMREL_PLUGIN_OWNER` | Optional | Repository owner. Defaults from the git remote when available. | Derived from git remote |
-| `SEMREL_PLUGIN_REPO` | Optional | Repository name. Defaults from the git remote when available. | Derived from git remote |
+| `SEMREL_PLUGIN_TOKEN` | Required | GitHub token with `repo` scope (falls back to `GITHUB_TOKEN`). | None |
+| `SEMREL_PLUGIN_OWNER` | Optional | Repository owner. Defaults from `GITHUB_REPOSITORY` or the git remote when available. | Derived from git remote |
+| `SEMREL_PLUGIN_REPO` | Optional | Repository name. Defaults from `GITHUB_REPOSITORY` or the git remote when available. | Derived from git remote |
+| `SEMREL_PLUGIN_BASE_URL` | Optional | GitHub API base URL (highest priority override). | `https://api.github.com` |
+| `SEMREL_PLUGIN_API_URL` | Optional | GitHub API base URL alias (used when `SEMREL_PLUGIN_BASE_URL` is not set). | `https://api.github.com` |
+| `SEMREL_PLUGIN_CA_CERT` | Optional | Path to a PEM-encoded CA certificate bundle added to the HTTP client's trusted roots. | None |
+| `SEMREL_PLUGIN_INSECURE_SKIP_VERIFY` | Optional | Skip TLS certificate verification (`true`/`1`). Use only as a last resort. | `false` |
 | `SEMREL_PLUGIN_DRAFT` | Optional | Create the release as a draft. | false |
 | `SEMREL_PLUGIN_PRERELEASE` | Optional | Mark the release as a prerelease. | false |
 | `SEMREL_PLUGIN_ASSETS` | Optional | Comma-separated file paths or glob patterns to upload as GitHub Release assets. | None |
 | `SEMREL_PLUGIN_COMMENT_ON_PRS` | Optional | Add an idempotent comment to pull requests included in the release. Defaults to true; set to `false` to disable. The token needs pull-request read and issue-comment write permissions. | true |
 
-## `SEMREL_*` release context used
+## `SEMREL_*` and GitHub environment context used
 
 | Variable | Description |
 | --- | --- |
@@ -68,6 +72,28 @@ plugins:
 | `SEMREL_NEXT_VERSION` | Next version computed by semrel for the release. |
 | `SEMREL_CHANGELOG` | Generated changelog text for the release. |
 | `SEMREL_DRY_RUN` | Whether semrel is running in dry-run mode. |
+| `GITHUB_API_URL` | Automatically used as the API base URL in GitHub Actions (including GitHub Enterprise Server) when `SEMREL_PLUGIN_BASE_URL` and `SEMREL_PLUGIN_API_URL` are not set. |
+| `GITHUB_REPOSITORY` | Fallback `owner/repo` when `SEMREL_PLUGIN_OWNER` / `SEMREL_PLUGIN_REPO` are not set. |
+| `GITHUB_TOKEN` | Fallback token when `SEMREL_PLUGIN_TOKEN` is not set. |
+
+## GitHub Enterprise
+
+`provider-github` supports **GitHub Enterprise Server (GHES)** and **GitHub Enterprise Cloud with data residency (`*.ghe.com`)** out of the box:
+
+- **API URL resolution order:** `SEMREL_PLUGIN_BASE_URL` → `SEMREL_PLUGIN_API_URL` → `GITHUB_API_URL` → `https://api.github.com`. Inside GitHub Actions on GHES, `GITHUB_API_URL` (for example `https://ghe.example.com/api/v3`) is picked up automatically.
+- **Endpoint & upload routing:** `/api/v3` prefixes and trailing slashes are preserved when resolving endpoints, and release asset uploads use the `upload_url` returned by the release response (or `/api/uploads/` / `uploads.<subdomain>.ghe.com` fallback).
+- **API version header:** `X-GitHub-Api-Version` is sent only to `api.github.com` and `*.ghe.com` hosts so older GHES versions that do not recognize the header are not rejected.
+- **Custom CA / self-signed certificates:** Set `SEMREL_PLUGIN_CA_CERT=/path/to/ca-bundle.pem` to trust an internal or self-signed CA certificate bundle. As a last resort, `SEMREL_PLUGIN_INSECURE_SKIP_VERIFY=true` disables TLS verification.
+
+```yaml
+plugins:
+  - name: provider-github
+    path: ~/.semrel/plugins/semrel-plugin-provider-github
+    env:
+      SEMREL_PLUGIN_TOKEN: "${GITHUB_TOKEN}"
+      SEMREL_PLUGIN_BASE_URL: "https://ghe.example.com/api/v3"
+      SEMREL_PLUGIN_CA_CERT: "/etc/ssl/certs/internal-ca.pem"
+```
 
 ## Example behavior
 

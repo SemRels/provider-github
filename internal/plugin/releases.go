@@ -7,6 +7,8 @@ package plugin
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,6 +17,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -24,19 +27,21 @@ const defaultBaseURL = "https://api.github.com"
 
 // Config contains the release request derived from the SemRel environment.
 type Config struct {
-	Token        string
-	Owner        string
-	Repo         string
-	BaseURL      string
-	TagName      string
-	Name         string
-	Body         string
-	Draft        bool
-	Prerelease   bool
-	DryRun       bool
-	Assets       string
-	CommentOnPRs bool
-	CommitHashes []string
+	Token              string
+	Owner              string
+	Repo               string
+	BaseURL            string
+	CACert             string
+	InsecureSkipVerify bool
+	TagName            string
+	Name               string
+	Body               string
+	Draft              bool
+	Prerelease         bool
+	DryRun             bool
+	Assets             string
+	CommentOnPRs       bool
+	CommitHashes       []string
 }
 
 // Release is the minimal GitHub release response used by the subprocess entrypoint.
@@ -65,6 +70,9 @@ func New(httpClient *http.Client) Creator {
 
 // ConfigFromEnv builds release configuration from SemRel and plugin environment variables.
 func ConfigFromEnv(getenv func(string) string) (Config, error) {
+	if getenv == nil {
+		getenv = func(string) string { return "" }
+	}
 	var repoOwner string
 	var repoName string
 	repository := strings.TrimSpace(getenv("GITHUB_REPOSITORY"))
@@ -75,6 +83,22 @@ func ConfigFromEnv(getenv func(string) string) (Config, error) {
 		}
 		repoOwner = parsedOwner
 		repoName = parsedRepo
+	}
+
+	owner := strings.TrimSpace(coalesce(getenv("SEMREL_PLUGIN_OWNER"), repoOwner))
+	repo := strings.TrimSpace(coalesce(getenv("SEMREL_PLUGIN_REPO"), repoName))
+	if owner == "" || repo == "" {
+		remoteURL := strings.TrimSpace(coalesce(getenv("SEMREL_PLUGIN_REMOTE_URL"), getenv("SEMREL_REPO_URL"), getenv("GIT_REMOTE_URL")))
+		if remoteURL != "" {
+			if remoteOwner, remoteRepo, err := parseRemoteRepository(remoteURL); err == nil {
+				if owner == "" {
+					owner = remoteOwner
+				}
+				if repo == "" {
+					repo = remoteRepo
+				}
+			}
+		}
 	}
 
 	tagName := strings.TrimSpace(coalesce(
@@ -95,20 +119,30 @@ func ConfigFromEnv(getenv func(string) string) (Config, error) {
 		}
 		commentOnPRs = value
 	}
+	var insecureSkipVerify bool
+	if raw := strings.TrimSpace(getenv("SEMREL_PLUGIN_INSECURE_SKIP_VERIFY")); raw != "" {
+		value, ok := parseBool(raw)
+		if !ok {
+			return Config{}, fmt.Errorf("SEMREL_PLUGIN_INSECURE_SKIP_VERIFY must be a boolean")
+		}
+		insecureSkipVerify = value
+	}
 
 	cfg := Config{
-		Token:        strings.TrimSpace(coalesce(getenv("SEMREL_PLUGIN_TOKEN"), getenv("GITHUB_TOKEN"))),
-		Owner:        strings.TrimSpace(coalesce(getenv("SEMREL_PLUGIN_OWNER"), repoOwner)),
-		Repo:         strings.TrimSpace(coalesce(getenv("SEMREL_PLUGIN_REPO"), repoName)),
-		BaseURL:      strings.TrimSpace(coalesce(getenv("SEMREL_PLUGIN_BASE_URL"), getenv("SEMREL_PLUGIN_API_URL"), defaultBaseURL)),
-		TagName:      tagName,
-		Name:         strings.TrimSpace(coalesce(getenv("SEMREL_PLUGIN_NAME"), tagName)),
-		Body:         getenv("SEMREL_CHANGELOG"),
-		Draft:        parseBoolValue(getenv("SEMREL_PLUGIN_DRAFT")),
-		Prerelease:   prerelease,
-		DryRun:       parseBoolValue(getenv("SEMREL_DRY_RUN")),
-		Assets:       getenv("SEMREL_PLUGIN_ASSETS"),
-		CommentOnPRs: commentOnPRs,
+		Token:              strings.TrimSpace(coalesce(getenv("SEMREL_PLUGIN_TOKEN"), getenv("GITHUB_TOKEN"))),
+		Owner:              owner,
+		Repo:               repo,
+		BaseURL:            strings.TrimSpace(coalesce(getenv("SEMREL_PLUGIN_BASE_URL"), getenv("SEMREL_PLUGIN_API_URL"), getenv("GITHUB_API_URL"), defaultBaseURL)),
+		CACert:             strings.TrimSpace(getenv("SEMREL_PLUGIN_CA_CERT")),
+		InsecureSkipVerify: insecureSkipVerify,
+		TagName:            tagName,
+		Name:               strings.TrimSpace(coalesce(getenv("SEMREL_PLUGIN_NAME"), tagName)),
+		Body:               getenv("SEMREL_CHANGELOG"),
+		Draft:              parseBoolValue(getenv("SEMREL_PLUGIN_DRAFT")),
+		Prerelease:         prerelease,
+		DryRun:             parseBoolValue(getenv("SEMREL_DRY_RUN")),
+		Assets:             getenv("SEMREL_PLUGIN_ASSETS"),
+		CommentOnPRs:       commentOnPRs,
 	}
 	if cfg.CommentOnPRs {
 		hashes := strings.TrimSpace(getenv("SEMREL_COMMIT_HASHES"))
@@ -127,22 +161,79 @@ func ConfigFromEnv(getenv func(string) string) (Config, error) {
 
 // CreateRelease uses the default HTTP client to create a GitHub release.
 func CreateRelease(ctx context.Context, cfg Config) (*Release, error) {
-	return New(nil).CreateRelease(ctx, cfg)
+	cli, err := clientForConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return cli.CreateRelease(ctx, cfg)
 }
 
 // CommentOnPullRequests posts a release comment on every pull request associated
 // with a commit in the release range.
 func CommentOnPullRequests(ctx context.Context, cfg Config, release *Release) error {
-	return defaultHTTPClient().CommentOnPullRequests(ctx, cfg, release)
+	cli, err := clientForConfig(cfg)
+	if err != nil {
+		return err
+	}
+	return cli.CommentOnPullRequests(ctx, cfg, release)
 }
 
 // UploadReleaseAssets uploads any configured assets for the provided release.
 func UploadReleaseAssets(ctx context.Context, cfg Config, release *Release, stderr io.Writer) {
-	defaultHTTPClient().UploadReleaseAssets(ctx, cfg, release, stderr)
+	cli, err := clientForConfig(cfg)
+	if err != nil {
+		warnf(stderr, "configure http client: %v", err)
+		return
+	}
+	cli.UploadReleaseAssets(ctx, cfg, release, stderr)
 }
 
-func defaultHTTPClient() *client {
-	return &client{httpClient: &http.Client{Timeout: 30 * time.Second}}
+// NewHTTPClient builds an HTTP client configured with TLS settings from cfg.
+func NewHTTPClient(cfg Config) (*http.Client, error) {
+	httpClient := &http.Client{Timeout: 30 * time.Second}
+	if strings.TrimSpace(cfg.CACert) == "" && !cfg.InsecureSkipVerify {
+		return httpClient, nil
+	}
+
+	baseTransport, ok := http.DefaultTransport.(*http.Transport)
+	var transport *http.Transport
+	if ok && baseTransport != nil {
+		transport = baseTransport.Clone()
+	} else {
+		transport = &http.Transport{}
+	}
+	if transport.TLSClientConfig == nil {
+		transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+	} else {
+		transport.TLSClientConfig = transport.TLSClientConfig.Clone()
+	}
+	if cfg.InsecureSkipVerify {
+		transport.TLSClientConfig.InsecureSkipVerify = true
+	}
+	if caPath := strings.TrimSpace(cfg.CACert); caPath != "" {
+		pemBytes, err := os.ReadFile(caPath)
+		if err != nil {
+			return nil, fmt.Errorf("read CA certificate %q: %w", caPath, err)
+		}
+		pool, err := x509.SystemCertPool()
+		if err != nil || pool == nil {
+			pool = x509.NewCertPool()
+		}
+		if !pool.AppendCertsFromPEM(pemBytes) {
+			return nil, fmt.Errorf("parse CA certificate %q: no valid PEM certificates found", caPath)
+		}
+		transport.TLSClientConfig.RootCAs = pool
+	}
+	httpClient.Transport = transport
+	return httpClient, nil
+}
+
+func clientForConfig(cfg Config) (*client, error) {
+	httpClient, err := NewHTTPClient(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return &client{httpClient: httpClient}, nil
 }
 
 func (c *client) CreateRelease(ctx context.Context, cfg Config) (*Release, error) {
@@ -381,7 +472,7 @@ func (c *client) UploadReleaseAssets(ctx context.Context, cfg Config, release *R
 }
 
 func (c *client) uploadReleaseAsset(ctx context.Context, cfg Config, release *Release, assetPath string) error {
-	uploadURL, baseURL, err := assetUploadURL(cfg, release, assetPath)
+	uploadURL, requestURL, err := assetUploadURL(cfg, release, assetPath)
 	if err != nil {
 		return err
 	}
@@ -410,7 +501,7 @@ func (c *client) uploadReleaseAsset(ctx context.Context, cfg Config, release *Re
 	// rejects chunked transfer encoding. http.NewRequest does not infer the
 	// length for an *os.File body, so it must be set manually.
 	req.ContentLength = stat.Size()
-	setGitHubHeaders(req, cfg.Token, contentType, baseURL)
+	setGitHubHeaders(req, cfg.Token, contentType, requestURL)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -454,14 +545,20 @@ func assetUploadURL(cfg Config, release *Release, assetPath string) (string, *ur
 	query.Set("name", filepath.Base(assetPath))
 	endpoint.RawQuery = query.Encode()
 
-	return endpoint.String(), baseURL, nil
+	return endpoint.String(), endpoint, nil
 }
 
 func uploadBaseURL(baseURL *url.URL) *url.URL {
 	uploadURL := *baseURL
-	if uploadURL.Host == "api.github.com" {
+	switch {
+	case uploadURL.Host == "api.github.com":
 		uploadURL.Host = "uploads.github.com"
 		uploadURL.Path = "/"
+	case strings.HasPrefix(uploadURL.Host, "api.") && strings.HasSuffix(uploadURL.Host, ".ghe.com"):
+		uploadURL.Host = "uploads." + strings.TrimPrefix(uploadURL.Host, "api.")
+		uploadURL.Path = "/"
+	case strings.HasSuffix(strings.TrimRight(uploadURL.Path, "/"), "/api/v3"):
+		uploadURL.Path = strings.TrimSuffix(strings.TrimRight(uploadURL.Path, "/"), "/api/v3") + "/api/uploads/"
 	}
 	return &uploadURL
 }
@@ -471,9 +568,14 @@ func setGitHubHeaders(req *http.Request, token string, contentType string, baseU
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", contentType)
 	req.Header.Set("User-Agent", "provider-github")
-	if baseURL != nil && baseURL.Host == "api.github.com" {
+	if baseURL != nil && isGitHubCloudHost(baseURL.Hostname()) {
 		req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 	}
+}
+
+func isGitHubCloudHost(host string) bool {
+	host = strings.ToLower(strings.TrimSpace(host))
+	return host == "api.github.com" || host == "uploads.github.com" || strings.HasSuffix(host, ".ghe.com")
 }
 
 func splitAssets(raw string) []string {
@@ -513,11 +615,84 @@ func validateConfig(cfg Config) error {
 
 func parseRepository(repository string) (string, string, error) {
 	repository = strings.TrimSpace(repository)
+	if strings.Contains(repository, "://") || (strings.Contains(repository, ":") && strings.Contains(repository, "/")) {
+		return parseRemoteRepository(repository)
+	}
 	parts := strings.Split(repository, "/")
 	if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
 		return "", "", fmt.Errorf("GITHUB_REPOSITORY must be owner/repo")
 	}
-	return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1]), nil
+	return strings.TrimSpace(parts[0]), strings.TrimSpace(sortedRepoName(parts[1])), nil
+}
+
+func sortedRepoName(name string) string {
+	return strings.TrimSuffix(strings.TrimSpace(name), ".git")
+}
+
+// parseRemoteRepository extracts the owner and repository name from a git
+// remote URL (HTTPS, HTTP, SSH URL, or SCP-style git@host:owner/repo.git) for
+// github.com, *.ghe.com, and GitHub Enterprise Server hostnames.
+func parseRemoteRepository(remoteURL string) (string, string, error) {
+	remoteURL = strings.TrimSpace(remoteURL)
+	if remoteURL == "" {
+		return "", "", fmt.Errorf("remote URL is empty")
+	}
+
+	var rawPath string
+	if strings.Contains(remoteURL, "://") {
+		parsed, err := url.Parse(remoteURL)
+		if err != nil || parsed.Host == "" {
+			return "", "", fmt.Errorf("invalid remote URL %q", remoteURL)
+		}
+		rawPath = parsed.Path
+	} else if colon := strings.Index(remoteURL, ":"); colon > 0 && !strings.Contains(remoteURL[:colon], "/") {
+		hostPart := remoteURL[:colon]
+		if at := strings.LastIndex(hostPart, "@"); at >= 0 {
+			hostPart = hostPart[at+1:]
+		}
+		if strings.TrimSpace(hostPart) == "" {
+			return "", "", fmt.Errorf("invalid remote URL %q", remoteURL)
+		}
+		rawPath = remoteURL[colon+1:]
+	} else {
+		return "", "", fmt.Errorf("invalid remote URL %q", remoteURL)
+	}
+
+	cleaned := strings.Trim(rawPath, "/")
+	cleaned = strings.TrimSuffix(cleaned, ".git")
+	cleaned = strings.Trim(cleaned, "/")
+	parts := strings.Split(cleaned, "/")
+	if len(parts) < 2 {
+		return "", "", fmt.Errorf("remote URL %q must contain owner/repo", remoteURL)
+	}
+	owner := strings.TrimSpace(parts[len(parts)-2])
+	repo := strings.TrimSpace(parts[len(parts)-1])
+	if owner == "" || repo == "" {
+		return "", "", fmt.Errorf("remote URL %q must contain owner/repo", remoteURL)
+	}
+	return owner, repo, nil
+}
+
+// GetenvWithGitFallback wraps an environment lookup function so GIT_REMOTE_URL
+// falls back to git's remote.origin.url when owner/repo are not explicitly set.
+func GetenvWithGitFallback(getenv func(string) string) func(string) string {
+	return func(key string) string {
+		if val := getenv(key); val != "" {
+			return val
+		}
+		if key == "GIT_REMOTE_URL" {
+			return gitRemoteOriginURL()
+		}
+		return ""
+	}
+}
+
+var gitRemoteOriginURL = func() string {
+	out, err := exec.Command("git", "config", "--get", "remote.origin.url").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
 
 func normalizeVersion(version string) string {

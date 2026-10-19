@@ -8,10 +8,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -539,6 +541,456 @@ func TestHelpers(t *testing.T) {
 	if got := splitAssets(" dist/*.tgz, ,dist/*.zip "); len(got) != 2 || got[0] != "dist/*.tgz" || got[1] != "dist/*.zip" {
 		t.Fatalf("splitAssets() = %#v", got)
 	}
+}
+
+func TestConfigFromEnvBaseURLPrecedence(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		env  map[string]string
+		want string
+	}{
+		{
+			name: "SEMREL_PLUGIN_BASE_URL wins over all",
+			env: map[string]string{
+				"SEMREL_PLUGIN_BASE_URL": "https://ghe-base.example.com/api/v3",
+				"SEMREL_PLUGIN_API_URL":  "https://ghe-api.example.com/api/v3",
+				"GITHUB_API_URL":         "https://ghe-actions.example.com/api/v3",
+			},
+			want: "https://ghe-base.example.com/api/v3",
+		},
+		{
+			name: "SEMREL_PLUGIN_API_URL wins over GITHUB_API_URL",
+			env: map[string]string{
+				"SEMREL_PLUGIN_API_URL": "https://ghe-api.example.com/api/v3",
+				"GITHUB_API_URL":        "https://ghe-actions.example.com/api/v3",
+			},
+			want: "https://ghe-api.example.com/api/v3",
+		},
+		{
+			name: "GITHUB_API_URL auto-detected on GHES",
+			env: map[string]string{
+				"GITHUB_API_URL": "https://ghe.example.com/api/v3",
+			},
+			want: "https://ghe.example.com/api/v3",
+		},
+		{
+			name: "defaults to api.github.com",
+			env:  map[string]string{},
+			want: defaultBaseURL,
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			env := map[string]string{
+				"GITHUB_TOKEN":      "token",
+				"GITHUB_REPOSITORY": "owner/repo",
+				"SEMREL_TAG_NAME":   "v1.2.3",
+			}
+			for k, v := range tc.env {
+				env[k] = v
+			}
+			cfg, err := ConfigFromEnv(envMap(env))
+			if err != nil {
+				t.Fatalf("ConfigFromEnv() error = %v", err)
+			}
+			if cfg.BaseURL != tc.want {
+				t.Fatalf("BaseURL = %q, want %q", cfg.BaseURL, tc.want)
+			}
+		})
+	}
+}
+
+func TestParseRemoteRepositoryAndInference(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		remoteURL string
+		wantOwner string
+		wantRepo  string
+		wantErr   bool
+	}{
+		{
+			name:      "github.com HTTPS with .git",
+			remoteURL: "https://github.com/SemRels/provider-github.git",
+			wantOwner: "SemRels",
+			wantRepo:  "provider-github",
+		},
+		{
+			name:      "GHES HTTPS without .git",
+			remoteURL: "https://ghe.example.com/enterprise-org/service-repo",
+			wantOwner: "enterprise-org",
+			wantRepo:  "service-repo",
+		},
+		{
+			name:      "GHES HTTPS with trailing slash and .git",
+			remoteURL: "https://ghe.example.com/enterprise-org/service-repo.git/",
+			wantOwner: "enterprise-org",
+			wantRepo:  "service-repo",
+		},
+		{
+			name:      "GHES SCP-style SSH",
+			remoteURL: "git@ghe.example.com:enterprise-org/service-repo.git",
+			wantOwner: "enterprise-org",
+			wantRepo:  "service-repo",
+		},
+		{
+			name:      "GHES ssh:// scheme with port",
+			remoteURL: "ssh://git@ghe.example.com:2222/enterprise-org/service-repo.git",
+			wantOwner: "enterprise-org",
+			wantRepo:  "service-repo",
+		},
+		{
+			name:      "GHEC data residency *.ghe.com SSH",
+			remoteURL: "git@company.ghe.com:team/project.git",
+			wantOwner: "team",
+			wantRepo:  "project",
+		},
+		{
+			name:      "invalid remote missing repo",
+			remoteURL: "https://ghe.example.com/only-owner",
+			wantErr:   true,
+		},
+		{
+			name:      "empty remote",
+			remoteURL: "",
+			wantErr:   true,
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			owner, repo, err := parseRemoteRepository(tc.remoteURL)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("parseRemoteRepository(%q) error = nil, want error", tc.remoteURL)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("parseRemoteRepository(%q) error = %v", tc.remoteURL, err)
+			}
+			if owner != tc.wantOwner || repo != tc.wantRepo {
+				t.Fatalf("parseRemoteRepository(%q) = (%q, %q), want (%q, %q)", tc.remoteURL, owner, repo, tc.wantOwner, tc.wantRepo)
+			}
+
+			cfg, err := ConfigFromEnv(envMap(map[string]string{
+				"GITHUB_TOKEN":    "token",
+				"GIT_REMOTE_URL":  tc.remoteURL,
+				"SEMREL_TAG_NAME": "v1.0.0",
+			}))
+			if err != nil {
+				t.Fatalf("ConfigFromEnv() with GIT_REMOTE_URL=%q error = %v", tc.remoteURL, err)
+			}
+			if cfg.Owner != tc.wantOwner || cfg.Repo != tc.wantRepo {
+				t.Fatalf("ConfigFromEnv() inferred (%q, %q), want (%q, %q)", cfg.Owner, cfg.Repo, tc.wantOwner, tc.wantRepo)
+			}
+		})
+	}
+}
+
+func TestGHESEndToEndReleaseCommentsAndAssetUpload(t *testing.T) {
+	dir := t.TempDir()
+	assetPath := filepath.Join(dir, "bundle.tar.gz")
+	if err := os.WriteFile(assetPath, []byte("ghes-binary-payload"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	tests := []struct {
+		name           string
+		basePathSuffix string
+		useUploadURL   bool
+	}{
+		{
+			name:           "GHES /api/v3 without trailing slash and upload_url from release",
+			basePathSuffix: "/api/v3",
+			useUploadURL:   true,
+		},
+		{
+			name:           "GHES /api/v3/ with trailing slash and /api/uploads fallback",
+			basePathSuffix: "/api/v3/",
+			useUploadURL:   false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var (
+				releaseCreated atomic.Bool
+				prCommented    atomic.Bool
+				assetUploaded  atomic.Bool
+				serverURL      string
+			)
+
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if got := r.Header.Get("X-GitHub-Api-Version"); got != "" {
+					t.Errorf("X-GitHub-Api-Version = %q, want empty on GHES host", got)
+				}
+				switch r.URL.Path {
+				case "/api/v3/repos/ent-owner/ent-repo/releases":
+					if r.Method != http.MethodPost {
+						t.Fatalf("release method = %s, want POST", r.Method)
+					}
+					releaseCreated.Store(true)
+					w.Header().Set("Content-Type", "application/json")
+					uploadURL := ""
+					if tc.useUploadURL {
+						uploadURL = serverURL + "/api/uploads/repos/ent-owner/ent-repo/releases/99/assets{?name,label}"
+					}
+					_ = json.NewEncoder(w).Encode(map[string]any{
+						"id":         99,
+						"html_url":   serverURL + "/ent-owner/ent-repo/releases/tag/v2.0.0",
+						"upload_url": uploadURL,
+					})
+				case "/api/v3/repos/ent-owner/ent-repo/commits/deadbeef/pulls":
+					if r.Method != http.MethodGet {
+						t.Fatalf("pulls method = %s, want GET", r.Method)
+					}
+					_, _ = w.Write([]byte(`[{"number":12}]`))
+				case "/api/v3/repos/ent-owner/ent-repo/issues/12/comments":
+					if r.Method == http.MethodGet {
+						_, _ = w.Write([]byte(`[]`))
+						return
+					}
+					if r.Method == http.MethodPost {
+						prCommented.Store(true)
+						w.WriteHeader(http.StatusCreated)
+						_, _ = w.Write([]byte(`{"id":1}`))
+						return
+					}
+					t.Fatalf("unexpected comments method %s", r.Method)
+				case "/api/uploads/repos/ent-owner/ent-repo/releases/99/assets":
+					if r.Method != http.MethodPost {
+						t.Fatalf("upload method = %s, want POST", r.Method)
+					}
+					if got := r.URL.Query().Get("name"); got != "bundle.tar.gz" {
+						t.Fatalf("upload query name = %q, want bundle.tar.gz", got)
+					}
+					body, err := io.ReadAll(r.Body)
+					if err != nil {
+						t.Fatalf("read upload body: %v", err)
+					}
+					if string(body) != "ghes-binary-payload" {
+						t.Fatalf("upload body = %q", string(body))
+					}
+					assetUploaded.Store(true)
+					w.WriteHeader(http.StatusCreated)
+					_, _ = w.Write([]byte(`{"state":"uploaded"}`))
+				default:
+					t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+				}
+			}))
+			defer server.Close()
+			serverURL = server.URL
+
+			cfg, err := ConfigFromEnv(envMap(map[string]string{
+				"GITHUB_TOKEN":         "ghes-token",
+				"GITHUB_API_URL":       server.URL + tc.basePathSuffix,
+				"GIT_REMOTE_URL":       "git@ghe.example.com:ent-owner/ent-repo.git",
+				"SEMREL_TAG_NAME":      "v2.0.0",
+				"SEMREL_CHANGELOG":     "GHES release notes",
+				"SEMREL_PLUGIN_ASSETS": assetPath,
+				"SEMREL_COMMIT_HASHES": `["deadbeef"]`,
+			}))
+			if err != nil {
+				t.Fatalf("ConfigFromEnv() error = %v", err)
+			}
+
+			cli := New(server.Client()).(*client)
+			release, err := cli.CreateRelease(context.Background(), cfg)
+			if err != nil {
+				t.Fatalf("CreateRelease() error = %v", err)
+			}
+			var stderr bytes.Buffer
+			cli.UploadReleaseAssets(context.Background(), cfg, release, &stderr)
+			if stderr.Len() != 0 {
+				t.Fatalf("UploadReleaseAssets() stderr = %q", stderr.String())
+			}
+			if err := cli.CommentOnPullRequests(context.Background(), cfg, release); err != nil {
+				t.Fatalf("CommentOnPullRequests() error = %v", err)
+			}
+
+			if !releaseCreated.Load() || !assetUploaded.Load() || !prCommented.Load() {
+				t.Fatalf("expected release, upload, and PR comment on GHES: release=%v upload=%v comment=%v",
+					releaseCreated.Load(), assetUploaded.Load(), prCommented.Load())
+			}
+		})
+	}
+}
+
+func TestSetGitHubHeadersAndUploadBaseURLByHost(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		baseURL       string
+		wantAPIVer    string
+		wantUploadURL string
+	}{
+		{
+			name:          "github.com API",
+			baseURL:       "https://api.github.com/",
+			wantAPIVer:    "2022-11-28",
+			wantUploadURL: "https://uploads.github.com/repos/o/r/releases/1/assets?name=a.tgz",
+		},
+		{
+			name:          "GHEC data residency *.ghe.com",
+			baseURL:       "https://api.company.ghe.com/",
+			wantAPIVer:    "2022-11-28",
+			wantUploadURL: "https://uploads.company.ghe.com/repos/o/r/releases/1/assets?name=a.tgz",
+		},
+		{
+			name:          "GHES /api/v3",
+			baseURL:       "https://ghe.example.com/api/v3",
+			wantAPIVer:    "",
+			wantUploadURL: "https://ghe.example.com/api/uploads/repos/o/r/releases/1/assets?name=a.tgz",
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			parsed, err := url.Parse(tc.baseURL)
+			if err != nil {
+				t.Fatalf("url.Parse: %v", err)
+			}
+			req, err := http.NewRequest(http.MethodGet, tc.baseURL, nil)
+			if err != nil {
+				t.Fatalf("http.NewRequest: %v", err)
+			}
+			setGitHubHeaders(req, "tok", "application/json", parsed)
+			if got := req.Header.Get("X-GitHub-Api-Version"); got != tc.wantAPIVer {
+				t.Fatalf("X-GitHub-Api-Version = %q, want %q", got, tc.wantAPIVer)
+			}
+
+			uploadURL, _, err := assetUploadURL(Config{
+				Owner:   "o",
+				Repo:    "r",
+				BaseURL: tc.baseURL,
+			}, &Release{ID: 1}, "a.tgz")
+			if err != nil {
+				t.Fatalf("assetUploadURL() error = %v", err)
+			}
+			if uploadURL != tc.wantUploadURL {
+				t.Fatalf("assetUploadURL() = %q, want %q", uploadURL, tc.wantUploadURL)
+			}
+		})
+	}
+}
+
+func TestCustomCACertAndInsecureSkipVerify(t *testing.T) {
+	t.Parallel()
+
+	tlsServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":77,"html_url":"https://ghe.example.com/o/r/releases/tag/v1.0.0"}`))
+	}))
+	t.Cleanup(tlsServer.Close)
+
+	certPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "CERTIFICATE",
+		Bytes: tlsServer.Certificate().Raw,
+	})
+	caFile := filepath.Join(t.TempDir(), "ghes-ca.pem")
+	if err := os.WriteFile(caFile, certPEM, 0o600); err != nil {
+		t.Fatalf("WriteFile(caFile) error = %v", err)
+	}
+
+	t.Run("custom CA certificate succeeds against TLS server", func(t *testing.T) {
+		cfg, err := ConfigFromEnv(envMap(map[string]string{
+			"SEMREL_PLUGIN_TOKEN":   "token",
+			"SEMREL_PLUGIN_OWNER":   "o",
+			"SEMREL_PLUGIN_REPO":    "r",
+			"SEMREL_PLUGIN_CA_CERT": caFile,
+			"GITHUB_API_URL":        tlsServer.URL + "/api/v3",
+			"SEMREL_TAG_NAME":       "v1.0.0",
+		}))
+		if err != nil {
+			t.Fatalf("ConfigFromEnv() error = %v", err)
+		}
+		rel, err := CreateRelease(context.Background(), cfg)
+		if err != nil {
+			t.Fatalf("CreateRelease() with custom CA error = %v", err)
+		}
+		if rel.ID != 77 {
+			t.Fatalf("release.ID = %d, want 77", rel.ID)
+		}
+	})
+
+	t.Run("insecure skip verify succeeds without CA cert", func(t *testing.T) {
+		cfg, err := ConfigFromEnv(envMap(map[string]string{
+			"SEMREL_PLUGIN_TOKEN":                "token",
+			"SEMREL_PLUGIN_OWNER":                "o",
+			"SEMREL_PLUGIN_REPO":                 "r",
+			"SEMREL_PLUGIN_INSECURE_SKIP_VERIFY": "true",
+			"GITHUB_API_URL":                     tlsServer.URL + "/api/v3",
+			"SEMREL_TAG_NAME":                    "v1.0.0",
+		}))
+		if err != nil {
+			t.Fatalf("ConfigFromEnv() error = %v", err)
+		}
+		if _, err := CreateRelease(context.Background(), cfg); err != nil {
+			t.Fatalf("CreateRelease() with InsecureSkipVerify error = %v", err)
+		}
+	})
+
+	t.Run("invalid CA cert path returns error", func(t *testing.T) {
+		_, err := NewHTTPClient(Config{CACert: filepath.Join(t.TempDir(), "missing.pem")})
+		if err == nil {
+			t.Fatal("NewHTTPClient() error = nil, want error for missing CA cert")
+		}
+	})
+
+	t.Run("invalid PEM content returns error", func(t *testing.T) {
+		badCA := filepath.Join(t.TempDir(), "bad.pem")
+		if err := os.WriteFile(badCA, []byte("not a pem cert"), 0o600); err != nil {
+			t.Fatalf("WriteFile() error = %v", err)
+		}
+		_, err := NewHTTPClient(Config{CACert: badCA})
+		if err == nil {
+			t.Fatal("NewHTTPClient() error = nil, want error for invalid PEM")
+		}
+	})
+
+	t.Run("invalid SEMREL_PLUGIN_INSECURE_SKIP_VERIFY returns error", func(t *testing.T) {
+		_, err := ConfigFromEnv(envMap(map[string]string{
+			"SEMREL_PLUGIN_TOKEN":                "token",
+			"SEMREL_PLUGIN_OWNER":                "o",
+			"SEMREL_PLUGIN_REPO":                 "r",
+			"SEMREL_PLUGIN_INSECURE_SKIP_VERIFY": "not-a-bool",
+			"SEMREL_TAG_NAME":                    "v1.0.0",
+		}))
+		if err == nil || !strings.Contains(err.Error(), "SEMREL_PLUGIN_INSECURE_SKIP_VERIFY") {
+			t.Fatalf("ConfigFromEnv() error = %v, want SEMREL_PLUGIN_INSECURE_SKIP_VERIFY error", err)
+		}
+	})
+
+	t.Run("GetenvWithGitFallback uses gitRemoteOriginURL fallback", func(t *testing.T) {
+		orig := gitRemoteOriginURL
+		t.Cleanup(func() { gitRemoteOriginURL = orig })
+		gitRemoteOriginURL = func() string {
+			return "git@ghe.example.com:fallback-owner/fallback-repo.git"
+		}
+		wrapped := GetenvWithGitFallback(envMap(map[string]string{
+			"GITHUB_TOKEN":    "token",
+			"SEMREL_TAG_NAME": "v1.0.0",
+		}))
+		cfg, err := ConfigFromEnv(wrapped)
+		if err != nil {
+			t.Fatalf("ConfigFromEnv() error = %v", err)
+		}
+		if cfg.Owner != "fallback-owner" || cfg.Repo != "fallback-repo" {
+			t.Fatalf("ConfigFromEnv() inferred (%q, %q), want (fallback-owner, fallback-repo)", cfg.Owner, cfg.Repo)
+		}
+	})
 }
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
