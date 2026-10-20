@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	plugin "github.com/SemRels/provider-github/internal/plugin"
@@ -38,7 +39,18 @@ func run(
 	}
 
 	if cfg.DryRun {
+		if strings.TrimSpace(cfg.Token) == "" {
+			_, _ = fmt.Fprintln(stderr, "[dry-run] provider-github: would need GITHUB_TOKEN (or SEMREL_PLUGIN_TOKEN) to create release")
+		}
+		_, _ = fmt.Fprintf(stderr, "[dry-run] provider-github: would create release %s for %s/%s\n", cfg.TagName, cfg.Owner, cfg.Repo)
 		_, _ = fmt.Fprintf(stdout, "provider-github: dry-run: would create %s for %s/%s at %s\n", cfg.TagName, cfg.Owner, cfg.Repo, release.URL)
+		_, _ = fmt.Fprintf(stdout, "tag: %s\ntitle: %s\ntarget: %s\n", cfg.TagName, cfg.Name, release.URL)
+		if assets := strings.TrimSpace(cfg.Assets); assets != "" {
+			_, _ = fmt.Fprintf(stdout, "assets: %s\n", assets)
+		}
+		if cfg.Body != "" {
+			_, _ = fmt.Fprintf(stdout, "notes:\n%s\n", cfg.Body)
+		}
 		return 0
 	}
 
