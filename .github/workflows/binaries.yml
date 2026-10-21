@@ -1,0 +1,55 @@
+---
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 The semrel Authors
+# yaml-language-server: $schema=https://www.schemastore.org/github-workflow.json
+name: Binaries
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  binaries:
+    name: Build and Release Binaries
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install tools with Mise
+        uses: jdx/mise-action@v5
+
+      - name: Build release binary
+        run: task build:all
+
+      - name: Generate checksum manifest
+        run: task checksums
+
+      - name: Upload GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
+        with:
+          name: ${{ github.ref_name }}
+          files: dist/*
+          generate_release_notes: false
+
+      - name: Trigger registry sync
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          REGISTRY_SYNC_TOKEN: ${{ secrets.REGISTRY_SYNC_TOKEN }}
+          REGISTRY_SYNC_WEBHOOK: ${{ secrets.REGISTRY_SYNC_WEBHOOK }}
+          PLUGIN_TAG: ${{ github.ref_name }}
+        run: task sync:registry
+
+...
