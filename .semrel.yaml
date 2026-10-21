@@ -1,21 +1,44 @@
+---
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 The semrel Authors
 # yaml-language-server: $schema=https://semrel.io/schema/v1.json
-#
+schemaVersion: 1
+
+tagPrefix: "v"
+commit_changelog: true
+tag_exists_strategy: update-changelog
+
 # semrel uses itself to manage this plugin's releases.
 # version_ceiling keeps releases in 0.x.x until deliberately promoted to 1.0.0.
 # To release 1.0.0: remove version_ceiling and commit.
 
-tagPrefix: "v"
 version_ceiling: "1.0.0"
 ceiling_strategy: clamp
-tag_exists_strategy: update-changelog
 
 branches:
   - name: main
 
+rules:
+    - type: feat
+      bump: minor
+    - type: fix
+      bump: patch
+    - type: perf
+      bump: patch
+    - type: revert
+      bump: patch
+
 plugins:
-  # condition-github-actions verifies we are running inside a legitimate
-  # GitHub Actions CI environment before any git work is done.
-  - uses: condition-github-actions
+  - uses: "@semrel/condition-github-actions"
     phase: condition
+  - uses: "@semrel/generator-changelog-md"
+    phase: pre-tag
+    args:
+      keep_releases: "10"
+  - uses: "@semrel/provider-github"
+    phase: release
+    args:
+      draft: "false"
+      prerelease: "false"
+
+...
