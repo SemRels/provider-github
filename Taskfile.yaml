@@ -1,0 +1,143 @@
+---
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 The semrel Authors
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+version: "3.40"
+
+tasks:
+  clean:
+    desc: Remove all temporary build artifacts
+    cmds:
+      - go clean -i ./...
+      - rm -rf dist/ bin/ coverage.out
+
+  fmt:
+    desc: Run standard formatter
+    vars:
+      SOURCES:
+        sh: find . -name "*.go" -type f | xargs echo
+    cmds:
+      - gofmt -s -w {{ .SOURCES }}
+
+  vet:
+    desc: Run vet linting
+    cmds:
+      - go vet ./...
+
+  lint:
+    desc: Run golangci linter
+    cmds:
+      - golangci-lint run
+
+  test:
+    desc: Run unit tests
+    vars:
+      PACKAGES:
+        sh: go list ./... | xargs echo
+    cmds:
+      - go test -v -coverprofile=coverage.out ./...
+
+  e2e:
+    desc: Run end-to-end tests
+    cmds:
+      - go test -tags e2e -v ./cmd/plugin/...
+
+  build:
+    desc: Build the plugin for the current platform
+    cmds:
+      - go build -v -trimpath -ldflags="-s -w" -o bin/plugin{{if eq .GOOS "windows"}}.exe{{end}} ./cmd/plugin
+    env:
+      CGO_ENABLED: "0"
+      GOOS: "{{ .GOOS }}"
+      GOARCH: "{{ .GOARCH }}"
+    vars:
+      GOOS:
+        sh: go env GOOS
+      GOARCH:
+        sh: go env GOARCH
+
+  build:dist:
+    desc: Build the plugin for the current platform
+    cmds:
+      - go build -v -trimpath -ldflags="-s -w" -o dist/plugin{{if eq .GOOS "windows"}}.exe{{end}} ./cmd/plugin
+      - sha256sum "dist/plugin{{if eq .GOOS "windows"}}.exe{{end}}" > "dist/plugin{{if eq .GOOS "windows"}}.exe{{end}}.sha256"
+    env:
+      CGO_ENABLED: "0"
+      GOOS: "{{ .GOOS }}"
+      GOARCH: "{{ .GOARCH }}"
+    vars:
+      GOOS:
+        sh: go env GOOS
+      GOARCH:
+        sh: go env GOARCH
+
+  build:all:
+    desc: Build the plugin for all release platforms
+    cmds:
+      - for:
+          - linux/amd64
+          - linux/arm64
+          - darwin/amd64
+          - darwin/arm64
+          - windows/amd64
+          - windows/arm64
+        cmd: >-
+          GOOS={{ index (splitList "/" .ITEM) 0 }}
+          GOARCH={{ index (splitList "/" .ITEM) 1 }}
+          go build -o dist/plugin-{{ index (splitList "/" .ITEM) 0 }}-{{ index (splitList "/" .ITEM) 1 }}{{if eq (index (splitList "/" .ITEM) 0) "windows"}}.exe{{end}}
+          ./cmd/plugin
+      - for:
+          - linux/amd64
+          - linux/arm64
+          - darwin/amd64
+          - darwin/arm64
+          - windows/amd64
+          - windows/arm64
+        cmd: >-
+          cd dist &&
+          sha256sum plugin-{{ index (splitList "/" .ITEM) 0 }}-{{ index (splitList "/" .ITEM) 1 }}{{if eq (index (splitList "/" .ITEM) 0) "windows"}}.exe{{end}}
+          > plugin-{{ index (splitList "/" .ITEM) 0 }}-{{ index (splitList "/" .ITEM) 1 }}{{if eq (index (splitList "/" .ITEM) 0) "windows"}}.exe{{end}}.sha256
+    env:
+      CGO_ENABLED: "0"
+
+  checksums:
+    desc: Generate checksums for all release artifacts
+    cmds:
+      - |
+        cd dist && find . -maxdepth 1 -type f ! -name '*.sha256' ! -name checksums.txt | sed 's|^\./||' | sort | while read -r file; do
+          sha256sum "${file}"
+        done > checksums.txt
+
+  sync:registry:
+    desc: Trigger a plugin sync in the semrel registry for a release tag
+    silent: true
+    vars:
+      PLUGIN_OWNER: SemRels
+      PLUGIN_REPO: SemRels/provider-github
+      PLUGIN_TAG:
+        sh: if [ -n "{{ .PLUGIN_TAG }}" ]; then echo "{{ .PLUGIN_TAG }}"; else git describe --tags --abbrev=0; fi
+    env:
+      PLUGIN_TAG: "{{ .PLUGIN_TAG }}"
+    cmds:
+      - |
+        if [ -n "${REGISTRY_SYNC_TOKEN:-}" ]; then
+          payload=$(printf '{"event_type":"sync-plugins","client_payload":{"source_owner":"{{ .PLUGIN_OWNER }}","source_repo":"{{ .PLUGIN_REPO }}","tag":"%s"}}' "${PLUGIN_TAG}")
+          curl --fail --silent --show-error \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${REGISTRY_SYNC_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/SemRels/semrel-registry/dispatches \
+            -d "${payload}"
+        elif [ -n "${REGISTRY_SYNC_WEBHOOK:-}" ]; then
+          payload=$(printf '{"repository":"{{ .PLUGIN_REPO }}","owner":"{{ .PLUGIN_OWNER }}","tag":"%s"}' "${PLUGIN_TAG}")
+          curl --fail --silent --show-error \
+            -X POST \
+            -H "Content-Type: application/json" \
+            "${REGISTRY_SYNC_WEBHOOK}" \
+            -d "${payload}"
+        else
+          echo "No registry sync secret configured; skipping dispatch."
+        fi
+
+...
