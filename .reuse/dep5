@@ -1,21 +1,21 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
-Upstream-Name: {{PROJECT_NAME}}
-Upstream-Contact: The {{PROJECT_NAME}} Authors <https://github.com/{{ORG_NAME}}/{{REPO_NAME}}>
-Source: {{REPO_URL}}
+Upstream-Name: provider-github
+Upstream-Contact: The semrel Authors <https://github.com/SemRels/provider-github>
+Source: https://github.com/SemRels/provider-github
 
 # ----------------------------------------------------------------------------
 # Documentation and community health files
 # ----------------------------------------------------------------------------
 Files: *.md
  .github/**/*.md
-Copyright: {{COPYRIGHT_YEAR}} The {{PROJECT_NAME}} Authors
+Copyright: 2026 The semrel Authors
 License: Apache-2.0
 
 # ----------------------------------------------------------------------------
 # Build and tooling configuration
 # ----------------------------------------------------------------------------
-Files: Makefile
- Makefile.template
+Files: Taskfile.yml
+ Taskfile.yaml
  Dockerfile
  go.mod
  go.sum
@@ -23,15 +23,18 @@ Files: Makefile
  *.template
  .gitignore
  .gitignore.template
+ .pre-commit-config.yaml
+ .github/renovate.json
  .github/**/*.yml
  .github/**/*.yaml
  .github/**/*.json
  .github/**/*.template
  .reuse/dep5
+ commitlint.config.js
  cmd/**/*.go
  internal/**/*.go
  proto/**
-Copyright: {{COPYRIGHT_YEAR}} The {{PROJECT_NAME}} Authors
+Copyright: 2026 The semrel Authors
 License: Apache-2.0
 
 # ----------------------------------------------------------------------------
@@ -40,10 +43,10 @@ License: Apache-2.0
 Files: LICENSE
  LICENSES/Apache-2.0.txt
  NOTICE
-Copyright: {{COPYRIGHT_YEAR}} The {{PROJECT_NAME}} Authors
+Copyright: 2026 The semrel Authors
 License: Apache-2.0
 
 # JSON Schema files
 Files: schema/*.json
-Copyright: The provider-github Authors
+Copyright: The semrel Authors
 License: Apache-2.0
