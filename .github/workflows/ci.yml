@@ -1,14 +1,16 @@
+---
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 The semrel Authors
+# yaml-language-server: $schema=https://www.schemastore.org/github-workflow.json
 name: CI
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   pull_request:
-    branches: [main]
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -17,48 +19,38 @@ jobs:
   ci:
     name: Build, test, lint, and scan
     runs-on: ubuntu-latest
-    continue-on-error: ${{ matrix.go == '1.27rc1' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        go: ["1.25", "1.26", "1.27"]
 
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: ${{ matrix.go == '1.27rc1' && '1.27.0-rc.1' || format('{0}.x', matrix.go) }}
-          allow-prereleases: true
-          cache: true
+      - name: Install tools with Mise
+        uses: jdx/mise-action@v5
 
       - name: Download dependencies
         run: go mod download
 
       - name: Run golangci-lint
-        if: matrix.go != '1.27'
-        uses: golangci/golangci-lint-action@82606bf257cbaff209d206a39f5134f0cfbfd2ee # v9.2.1
-        with:
-          version: v2.12.2
+        run: task lint
 
       - name: Run tests
-        run: go test -v -coverprofile=coverage.txt ./...
+        run: task test
 
       - name: Show coverage summary
-        run: go tool cover -func=coverage.txt | tail -1
+        run: go tool cover -func=coverage.out | tail -1
 
       - name: Upload coverage report
-        if: matrix.go == '1.26'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: coverage-report
-          path: coverage.txt
+          path: coverage.out
           retention-days: 30
 
       - name: Build plugin binary
-        run: go build -v ./cmd/plugin
+        run: task build
+
+      - name: Run end-to-end tests
+        run: task e2e
 
       - name: Run Trivy filesystem scan
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -69,3 +61,5 @@ jobs:
           exit-code: '1'
           ignore-unfixed: true
           severity: CRITICAL,HIGH
+
+...
