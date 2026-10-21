@@ -1,0 +1,83 @@
+---
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 The semrel Authors
+# yaml-language-server: $schema=https://www.schemastore.org/github-workflow.json
+name: Semrel Release
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Run Semrel
+    runs-on: ubuntu-latest
+
+    outputs:
+      released: ${{ steps.semrel.outputs.released }}
+      tag: ${{ steps.semrel.outputs.tag }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install tools with Mise
+        uses: jdx/mise-action@v5
+
+      - name: Configure git identity
+        run: |
+          git config user.name  "semrel-bot"
+          git config user.email "semrel-bot@users.noreply.github.com"
+
+      - name: Run semrel release
+        id: semrel
+        run: semrel release --github-output
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push tag to GitHub
+        if: steps.semrel.outputs.released == 'true'
+        run: |
+          TAG="${{ steps.semrel.outputs.tag }}"
+          if git ls-remote --tags origin "$TAG" | grep -q "$TAG"; then
+            echo "Tag $TAG already exists on remote — skipping"
+          else
+            git push origin "refs/tags/$TAG"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Trigger binary build
+        if: steps.semrel.outputs.released == 'true'
+        run: |
+          TAG="${{ steps.semrel.outputs.tag }}"
+          echo "Triggering binaries.yml for tag $TAG"
+          gh workflow run binaries.yml --ref "$TAG" --repo "${{ github.repository }}"
+          echo "Triggering container.yml for tag $TAG"
+          gh workflow run container.yml --ref "$TAG" --repo "${{ github.repository }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Summary
+        run: |
+          if [ "${{ steps.semrel.outputs.released }}" = "true" ]; then
+            echo "### Released ${{ steps.semrel.outputs.tag }} 🚀" >> $GITHUB_STEP_SUMMARY
+            echo "**Bump:** ${{ steps.semrel.outputs.bump }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### No release — no releasable commits found." >> $GITHUB_STEP_SUMMARY
+          fi
+
+...
