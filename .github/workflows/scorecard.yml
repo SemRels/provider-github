@@ -1,31 +1,28 @@
+---
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 The semrel Authors
-
+# yaml-language-server: $schema=https://www.schemastore.org/github-workflow.json
 name: Scorecard
 
 on:
+  workflow_dispatch:
   push:
-    branches: [main]
+    branches:
+      - main
   schedule:
     - cron: "30 1 * * 1"
-  workflow_dispatch:
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
 
 permissions:
+  security-events: write
+  id-token: write
   contents: read
+  actions: read
 
 jobs:
   analysis:
-    name: Scorecard analysis
+    name: Scorecard Analysis
     runs-on: ubuntu-latest
-    permissions:
-      security-events: write
-      id-token: write
-      contents: read
-      actions: read
+
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -43,6 +40,8 @@ jobs:
           path: results.sarif
           retention-days: 5
 
-      - uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+      - uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4
         with:
           sarif_file: results.sarif
+
+...
