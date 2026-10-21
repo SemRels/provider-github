@@ -1,0 +1,18 @@
+---
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 The semrel Authors
+# yaml-language-server: $schema=https://www.schemastore.org/pre-commit-config.json
+default_stages:
+  - pre-commit
+
+repos:
+  - repo: https://github.com/alessandrojcm/commitlint-pre-commit-hook
+    rev: v9.26.0
+    hooks:
+      - id: commitlint
+        stages:
+          - commit-msg
+        additional_dependencies:
+          - "@commitlint/config-conventional"
+
+...
