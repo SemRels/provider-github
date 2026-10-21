@@ -1,31 +1,45 @@
 # SPDX-License-Identifier: Apache-2.0
-# SPDX-FileCopyrightText: 2026 The provider-github Authors
+# SPDX-FileCopyrightText: 2026 The semrel Authors
 
 # ── build stage ────────────────────────────────────────────────────────────────
-FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS build
+FROM --platform=$BUILDPLATFORM debian:13-slim AS build
+
+RUN apt-get update && \
+    apt-get -y --no-install-recommends install ca-certificates curl git build-essential && \
+    rm -rf /var/lib/apt/lists/*
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+ENV PATH="/root/.local/bin:/mise/shims:$PATH" \
+    MISE_DATA_DIR="/mise" \
+    MISE_CONFIG_DIR="/mise" \
+    MISE_CACHE_DIR="/mise/cache" \
+    MISE_INSTALL_PATH="/usr/local/bin/mise"
+
+RUN curl --proto '=https' --proto-redir '=https' \
+    --fail --show-error --silent --location https://mise.run | sh
+
+COPY mise.toml ./
+RUN --mount=type=cache,target=/mise/cache \
+   mise trust && mise install
+
+WORKDIR /src
+
+COPY go.mod go.sum* ./
+RUN --mount=type=cache,target=/root/go/pkg \
+    go mod download -x
+
+COPY . .
 
 ARG TARGETOS
 ARG TARGETARCH
 ARG VERSION=dev
 
-WORKDIR /src
-RUN apk add --no-cache ca-certificates git
-COPY go.mod go.sum ./
-RUN go mod download
-COPY . .
-RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
-    go build -trimpath -ldflags="-s -w" -o /out/plugin ./cmd/plugin
+RUN GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    task build
 
 # ── distroless release image ───────────────────────────────────────────────────
-FROM gcr.io/distroless/static-debian12:nonroot
+FROM gcr.io/distroless/static-debian13:nonroot
 
-# NOTE: intentionally no repo-specific `org.opencontainers.image.*` LABEL block
-# here. sync-template.yml only substitutes the "provider-github Authors" line
-# in this file when propagating it to plugin repos (see `sed` step) — it does
-# NOT rewrite LABEL title/description/source values. Adding those here would
-# get copied verbatim (and wrongly) into every plugin's Dockerfile. Add labels
-# in each plugin's own Dockerfile after copying this template, not here.
-
-COPY --from=build /out/plugin /usr/local/bin/plugin
+COPY --from=build /src/bin/plugin /usr/local/bin/plugin
 USER nonroot
 ENTRYPOINT ["/usr/local/bin/plugin"]
