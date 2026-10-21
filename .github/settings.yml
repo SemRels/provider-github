@@ -34,7 +34,6 @@ rulesets:
           - "~DEFAULT_BRANCH"
         exclude: []
     rules:
-      - type: required_linear_history
       - type: deletion
       - type: non_fast_forward
 
