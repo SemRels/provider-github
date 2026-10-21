@@ -1,6 +1,10 @@
 # provider-github
 
 [![Latest Release](https://img.shields.io/github/v/release/SemRels/provider-github?label=version&color=blue)](https://github.com/SemRels/provider-github/releases/latest)
+[![CI](https://github.com/SemRels/provider-github/actions/workflows/ci.yml/badge.svg)](https://github.com/SemRels/provider-github/actions/workflows/ci.yml)
+[![License](https://img.shields.io/github/license/SemRels/provider-github)](LICENSE)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/SemRels/provider-github/badge)](https://scorecard.dev/viewer/?uri=github.com/SemRels/provider-github)
+[![REUSE status](https://api.reuse.software/badge/github.com/SemRels/provider-github)](https://api.reuse.software/info/github.com/SemRels/provider-github)
 
 Publishes the semrel release to GitHub Releases.
 
