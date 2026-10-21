@@ -1,0 +1,137 @@
+---
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 The semrel Authors
+# yaml-language-server: $schema=http://json-schema.org/draft-07/schema#
+repository:
+  name: provider-github
+  description: Semrel provider plugin that publishes releases to GitHub Releases
+  topics: semrel, semrel-plugin, provider, github
+
+  private: false
+  has_issues: true
+  has_wiki: false
+  has_downloads: false
+
+  default_branch: main
+
+  allow_merge_commit: false
+  allow_squash_merge: true
+  allow_rebase_merge: true
+
+  allow_update_branch: true
+  allow_auto_merge: true
+  delete_branch_on_merge: true
+  enable_automated_security_fixes: true
+  enable_vulnerability_alerts: true
+
+rulesets:
+  - name: prevent destruction
+    target: branch
+    enforcement: active
+    conditions:
+      ref_name:
+        include:
+          - "~DEFAULT_BRANCH"
+        exclude: []
+    rules:
+      - type: required_linear_history
+      - type: deletion
+      - type: non_fast_forward
+
+  - name: check verification
+    target: branch
+    enforcement: active
+    conditions:
+      ref_name:
+        include:
+          - "~DEFAULT_BRANCH"
+        exclude: []
+    rules:
+      - type: required_status_checks
+        parameters:
+          strict_required_status_checks_policy: true
+          required_status_checks:
+            - context: "Build, test, lint, and scan"
+              integration_id: 15368
+            - context: "Build and Release Containers"
+              integration_id: 15368
+    bypass_actors:
+      - actor_id: 1
+        actor_type: OrganizationAdmin
+        bypass_mode: always
+
+  - name: require reviewing
+    target: branch
+    enforcement: active
+    conditions:
+      ref_name:
+        include:
+          - "~DEFAULT_BRANCH"
+        exclude: []
+    rules:
+      - type: pull_request
+        parameters:
+          allowed_merge_methods:
+            - squash
+            - rebase
+          dismiss_stale_reviews_on_push: false
+          require_code_owner_review: false
+          require_last_push_approval: false
+          required_approving_review_count: 0
+          required_review_thread_resolution: false
+    bypass_actors:
+      - actor_id: 1
+        actor_type: OrganizationAdmin
+        bypass_mode: always
+
+labels:
+  - name: bug
+    color: "fc2929"
+    description: Something isn't working
+  - name: dependencies
+    color: "0366d6"
+    description: Pull requests that update a dependency file
+  - name: documentation
+    color: "0075ca"
+    description: Improvements or additions to documentation
+  - name: duplicate
+    color: "cfd3d7"
+    description: This issue or pull request already exists
+  - name: enhancement
+    color: "a2eeef"
+    description: New feature or request
+  - name: github_actions
+    color: "000000"
+    description: Pull requests that update GitHub Actions code
+  - name: go
+    color: "16e2e2"
+    description: Pull requests that update go code
+  - name: good first issue
+    color: "7057ff"
+    description: Good for newcomers
+  - name: help wanted
+    color: "008672"
+    description: Extra attention is needed
+  - name: implementation
+    color: "5319e7"
+    description: Implementation task
+  - name: invalid
+    color: "e4e669"
+    description: This doesn't seem right
+  - name: mvp
+    color: "fbca04"
+    description: Minimum viable plugin delivery
+  - name: plugin
+    color: "0e8a16"
+    description: Plugin-related work
+  - name: question
+    color: "d876e3"
+    description: Further information is requested
+  - name: wontfix
+    color: "ffffff"
+    description: This will not be worked on
+  - name: renovate
+    color: "1d76db"
+    description: Automated action from Renovate
+
+...
