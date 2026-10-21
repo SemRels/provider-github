@@ -27,6 +27,8 @@ rules:
       bump: patch
     - type: revert
       bump: patch
+    - type: deps
+      bump: patch
 
 plugins:
   - uses: "@semrel/condition-github-actions"
