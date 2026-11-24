@@ -10,5 +10,5 @@ node = "26"
 prek = "0.5.11"
 task = "3.54.0"
 
-"github:SemRels/semrel" = "0.28.3"
+"github:SemRels/semrel" = "0.29.0"
 "go:github.com/golangci/golangci-lint/v2/cmd/golangci-lint" = "2.15.0"
