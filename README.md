@@ -1,6 +1,10 @@
 # provider-github
 
 [![Latest Release](https://img.shields.io/github/v/release/SemRels/provider-github?label=version&color=blue)](https://github.com/SemRels/provider-github/releases/latest)
+[![CI](https://github.com/SemRels/provider-github/actions/workflows/ci.yml/badge.svg)](https://github.com/SemRels/provider-github/actions/workflows/ci.yml)
+[![License](https://img.shields.io/github/license/SemRels/provider-github)](LICENSE)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/SemRels/provider-github/badge)](https://scorecard.dev/viewer/?uri=github.com/SemRels/provider-github)
+[![REUSE status](https://api.reuse.software/badge/github.com/SemRels/provider-github)](https://api.reuse.software/info/github.com/SemRels/provider-github)
 
 Publishes the semrel release to GitHub Releases.
 
@@ -26,7 +30,7 @@ Images are signed with [cosign](https://github.com/sigstore/cosign) and include 
 
 ```bash
 cosign verify ghcr.io/semrels/provider-github:latest \
-  --certificate-identity-regexp 'https://github.com/SemRels/provider-github/.github/workflows/release.yml.*' \
+  --certificate-identity-regexp 'https://github.com/SemRels/provider-github/.github/workflows/container.yml.*' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
@@ -35,33 +39,35 @@ cosign verify ghcr.io/semrels/provider-github:latest \
 
 ```yaml
 plugins:
-  - name: provider-github
-    path: ~/.semrel/plugins/semrel-plugin-provider-github
-    env:
-      SEMREL_PLUGIN_TOKEN: "${GITHUB_TOKEN}"
-      SEMREL_PLUGIN_OWNER: "SemRels"
-      SEMREL_PLUGIN_REPO: "provider-github"
-      SEMREL_PLUGIN_DRAFT: "false"
-      SEMREL_PLUGIN_PRERELEASE: "false"
-      SEMREL_PLUGIN_ASSETS: "dist/*.tar.gz,dist/*.zip,build/myapp"
-      SEMREL_PLUGIN_COMMENT_ON_PRS: "true"
+  - uses: "@semrel/provider-github"
+    phase: release
+    args:
+      token: "${GITHUB_TOKEN}"
+      owner: "SemRels"
+      repo: "provider-github"
+      draft: "false"
+      prerelease: "false"
+      assets: "dist/*.tar.gz,dist/*.zip,build/myapp"
+      comment_on_prs: "true"
 ```
 
-## `SEMREL_PLUGIN_*` variables
+## Options
 
-| Name | Required | Description | Default |
-| --- | --- | --- | --- |
-| `SEMREL_PLUGIN_TOKEN` | Required | GitHub token with `repo` scope (falls back to `GITHUB_TOKEN`). | None |
-| `SEMREL_PLUGIN_OWNER` | Optional | Repository owner. Defaults from `GITHUB_REPOSITORY` or the git remote when available. | Derived from git remote |
-| `SEMREL_PLUGIN_REPO` | Optional | Repository name. Defaults from `GITHUB_REPOSITORY` or the git remote when available. | Derived from git remote |
-| `SEMREL_PLUGIN_BASE_URL` | Optional | GitHub API base URL (highest priority override). | `https://api.github.com` |
-| `SEMREL_PLUGIN_API_URL` | Optional | GitHub API base URL alias (used when `SEMREL_PLUGIN_BASE_URL` is not set). | `https://api.github.com` |
-| `SEMREL_PLUGIN_CA_CERT` | Optional | Path to a PEM-encoded CA certificate bundle added to the HTTP client's trusted roots. | None |
-| `SEMREL_PLUGIN_INSECURE_SKIP_VERIFY` | Optional | Skip TLS certificate verification (`true`/`1`). Use only as a last resort. | `false` |
-| `SEMREL_PLUGIN_DRAFT` | Optional | Create the release as a draft. | false |
-| `SEMREL_PLUGIN_PRERELEASE` | Optional | Mark the release as a prerelease. | false |
-| `SEMREL_PLUGIN_ASSETS` | Optional | Comma-separated file paths or glob patterns to upload as GitHub Release assets. | None |
-| `SEMREL_PLUGIN_COMMENT_ON_PRS` | Optional | Add an idempotent comment to pull requests included in the release. Defaults to true; set to `false` to disable. The token needs pull-request read and issue-comment write permissions. | true |
+Every option can be set as an entry under `args` in `.semrel.yaml`. semrel passes each entry to the plugin as the environment variable shown in the table, so you can also set that variable directly (for example in your CI environment) instead of using `args`.
+
+| Argument | Environment variable | Required | Description | Default |
+| --- | --- | --- | --- | --- |
+| `token` | `SEMREL_PLUGIN_TOKEN` | Required | GitHub token with `repo` scope (falls back to `GITHUB_TOKEN`). | None |
+| `owner` | `SEMREL_PLUGIN_OWNER` | Optional | Repository owner. Defaults from `GITHUB_REPOSITORY` or the git remote when available. | Derived from git remote |
+| `repo` | `SEMREL_PLUGIN_REPO` | Optional | Repository name. Defaults from `GITHUB_REPOSITORY` or the git remote when available. | Derived from git remote |
+| `base_url` | `SEMREL_PLUGIN_BASE_URL` | Optional | GitHub API base URL (highest priority override). | `https://api.github.com` |
+| `api_url` | `SEMREL_PLUGIN_API_URL` | Optional | GitHub API base URL alias (used when `SEMREL_PLUGIN_BASE_URL` is not set). | `https://api.github.com` |
+| `ca_cert` | `SEMREL_PLUGIN_CA_CERT` | Optional | Path to a PEM-encoded CA certificate bundle added to the HTTP client's trusted roots. | None |
+| `insecure_skip_verify` | `SEMREL_PLUGIN_INSECURE_SKIP_VERIFY` | Optional | Skip TLS certificate verification (`true`/`1`). Use only as a last resort. | `false` |
+| `draft` | `SEMREL_PLUGIN_DRAFT` | Optional | Create the release as a draft. | false |
+| `prerelease` | `SEMREL_PLUGIN_PRERELEASE` | Optional | Mark the release as a prerelease. | false |
+| `assets` | `SEMREL_PLUGIN_ASSETS` | Optional | Comma-separated file paths or glob patterns to upload as GitHub Release assets. | None |
+| `comment_on_prs` | `SEMREL_PLUGIN_COMMENT_ON_PRS` | Optional | Add an idempotent comment to pull requests included in the release. Defaults to true; set to `false` to disable. The token needs pull-request read and issue-comment write permissions. | true |
 
 ## `SEMREL_*` and GitHub environment context used
 
@@ -87,12 +93,12 @@ plugins:
 
 ```yaml
 plugins:
-  - name: provider-github
-    path: ~/.semrel/plugins/semrel-plugin-provider-github
-    env:
-      SEMREL_PLUGIN_TOKEN: "${GITHUB_TOKEN}"
-      SEMREL_PLUGIN_BASE_URL: "https://ghe.example.com/api/v3"
-      SEMREL_PLUGIN_CA_CERT: "/etc/ssl/certs/internal-ca.pem"
+  - uses: "@semrel/provider-github"
+    phase: release
+    args:
+      token: "${GITHUB_TOKEN}"
+      base_url: "https://ghe.example.com/api/v3"
+      ca_cert: "/etc/ssl/certs/internal-ca.pem"
 ```
 
 ## Example behavior

@@ -1,6 +1,7 @@
+---
 # SPDX-License-Identifier: Apache-2.0
-# SPDX-FileCopyrightText: 2026 The plugin-template Authors
-
+# SPDX-FileCopyrightText: 2026 The semrel Authors
+# yaml-language-server: $schema=https://golangci-lint.run/jsonschema/golangci.jsonschema.json
 version: "2"
 
 run:
@@ -12,3 +13,6 @@ linters:
     - govet
     - ineffassign
     - staticcheck
+    - unused
+
+...

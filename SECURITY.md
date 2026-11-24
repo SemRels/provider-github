@@ -4,17 +4,17 @@
 
 | Version | Supported |
 | --- | --- |
-| `main` / `{{DEFAULT_BRANCH}}` | ? |
+| `main` (pre-release) | ✅ |
 
-Update this table once stable releases exist.
+Once stable releases are published this table will list supported version ranges.
 
 ## Reporting a Vulnerability
 
-**Do not open a public issue for security vulnerabilities.**
+**Please do not open a public GitHub Issue for security vulnerabilities.**
 
-Please report vulnerabilities through **[GitHub Security Advisories]({{SECURITY_ADVISORY_URL}})**.
+Report security issues privately via **[GitHub Security Advisories](https://github.com/SemRels/provider-github/security/advisories/new)**.
 
-Alternative contact: {{SECURITY_CONTACT}}
+You can also reach the maintainers at the addresses listed in [MAINTAINERS.md](MAINTAINERS.md).
 
 ## What To Include
 
@@ -23,7 +23,7 @@ Alternative contact: {{SECURITY_CONTACT}}
 - Affected versions, tags, or commits
 - Proposed mitigations or workarounds, if known
 
-## Response Targets
+## Response SLA
 
 | Action | Target |
 | --- | --- |

@@ -1,11 +1,11 @@
 name: Bug Report
-description: Report a bug in {{PROJECT_NAME}}
+description: Report a bug in provider-github
 labels: ["type: bug", "needs triage"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thank you for reporting a bug. For security vulnerabilities, use private reporting via {{SECURITY_ADVISORY_URL}}.
+        Thank you for reporting a bug. For security vulnerabilities, use private reporting via https://github.com/SemRels/provider-github/security/advisories/new.
   - type: input
     id: version
     attributes:

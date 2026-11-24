@@ -4,8 +4,8 @@
 
 | Name | GitHub | Affiliation | Areas |
 | --- | --- | --- | --- |
-| {{MAINTAINER_NAME_1}} | [@{{MAINTAINER_GITHUB_1}}](https://github.com/{{MAINTAINER_GITHUB_1}}) | {{AFFILIATION_1}} | {{AREAS_1}} |
-| {{MAINTAINER_NAME_2}} | [@{{MAINTAINER_GITHUB_2}}](https://github.com/{{MAINTAINER_GITHUB_2}}) | {{AFFILIATION_2}} | {{AREAS_2}} |
+| Markus Waldheim | [@mwaldheim](https://github.com/mwaldheim) | Independent | Core, Plugin Architecture, CI |
+| Thomas Boerger | [@tboerger](https://github.com/tboerger) | Independent | Core, Plugin Architecture, Gitea Integration |
 
 ## Responsibilities
 
