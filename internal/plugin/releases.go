@@ -179,13 +179,12 @@ func CommentOnPullRequests(ctx context.Context, cfg Config, release *Release) er
 }
 
 // UploadReleaseAssets uploads any configured assets for the provided release.
-func UploadReleaseAssets(ctx context.Context, cfg Config, release *Release, stderr io.Writer) {
+func UploadReleaseAssets(ctx context.Context, cfg Config, release *Release) error {
 	cli, err := clientForConfig(cfg)
 	if err != nil {
-		warnf(stderr, "configure http client: %v", err)
-		return
+		return fmt.Errorf("configure http client: %w", err)
 	}
-	cli.UploadReleaseAssets(ctx, cfg, release, stderr)
+	return cli.UploadReleaseAssets(ctx, cfg, release)
 }
 
 // NewHTTPClient builds an HTTP client configured with TLS settings from cfg.
@@ -431,21 +430,26 @@ func (c *client) commentOnPullRequest(ctx context.Context, cfg Config, baseURL *
 	return nil
 }
 
-func (c *client) UploadReleaseAssets(ctx context.Context, cfg Config, release *Release, stderr io.Writer) {
-	if cfg.DryRun || strings.TrimSpace(cfg.Assets) == "" || release == nil {
-		return
+func (c *client) UploadReleaseAssets(ctx context.Context, cfg Config, release *Release) error {
+	if cfg.DryRun || strings.TrimSpace(cfg.Assets) == "" {
+		return nil
+	}
+	if release == nil {
+		return fmt.Errorf("release is required when assets are configured")
 	}
 
+	patterns := splitAssets(cfg.Assets)
+	if len(patterns) == 0 {
+		return fmt.Errorf("SEMREL_PLUGIN_ASSETS must contain at least one file path or glob pattern")
+	}
 	seen := make(map[string]struct{})
-	for _, pattern := range splitAssets(cfg.Assets) {
+	for _, pattern := range patterns {
 		matches, err := filepath.Glob(pattern)
 		if err != nil {
-			warnf(stderr, "asset pattern %q is invalid: %v", pattern, err)
-			continue
+			return fmt.Errorf("asset pattern %q is invalid: %w", pattern, err)
 		}
 		if len(matches) == 0 {
-			warnf(stderr, "asset pattern %q matched no files", pattern)
-			continue
+			return fmt.Errorf("asset pattern %q matched no files", pattern)
 		}
 		for _, match := range matches {
 			cleaned := filepath.Clean(match)
@@ -456,19 +460,18 @@ func (c *client) UploadReleaseAssets(ctx context.Context, cfg Config, release *R
 
 			info, err := os.Stat(cleaned)
 			if err != nil {
-				warnf(stderr, "cannot read asset %q: %v", cleaned, err)
-				continue
+				return fmt.Errorf("cannot read asset %q: %w", cleaned, err)
 			}
-			if info.IsDir() {
-				warnf(stderr, "asset %q is a directory", cleaned)
-				continue
+			if !info.Mode().IsRegular() {
+				return fmt.Errorf("asset %q is not a regular file", cleaned)
 			}
 
 			if err := c.uploadReleaseAsset(ctx, cfg, release, cleaned); err != nil {
-				warnf(stderr, "failed to upload asset %q: %v", cleaned, err)
+				return fmt.Errorf("failed to upload asset %q: %w", cleaned, err)
 			}
 		}
 	}
+	return nil
 }
 
 func (c *client) uploadReleaseAsset(ctx context.Context, cfg Config, release *Release, assetPath string) error {
@@ -588,13 +591,6 @@ func splitAssets(raw string) []string {
 		}
 	}
 	return assets
-}
-
-func warnf(stderr io.Writer, format string, args ...any) {
-	if stderr == nil {
-		return
-	}
-	_, _ = fmt.Fprintf(stderr, "provider-github: warning: "+format+"\n", args...)
 }
 
 func validateConfig(cfg Config) error {

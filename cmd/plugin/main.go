@@ -22,7 +22,7 @@ func run(
 	stdout io.Writer,
 	stderr io.Writer,
 	createRelease func(context.Context, plugin.Config) (*plugin.Release, error),
-	uploadAssets func(context.Context, plugin.Config, *plugin.Release, io.Writer),
+	uploadAssets func(context.Context, plugin.Config, *plugin.Release) error,
 ) int {
 	_, _ = fmt.Fprintf(stderr, "plugin_schema_version=%d\n", pluginSchemaVersion)
 	cfg, err := plugin.ConfigFromEnv(getenv)
@@ -42,7 +42,10 @@ func run(
 		return 0
 	}
 
-	uploadAssets(ctx, cfg, release, stderr)
+	if err := uploadAssets(ctx, cfg, release); err != nil {
+		_, _ = fmt.Fprintln(stderr, "provider-github:", err)
+		return 1
+	}
 	if err := plugin.CommentOnPullRequests(ctx, cfg, release); err != nil {
 		_, _ = fmt.Fprintln(stderr, "provider-github:", err)
 		return 1

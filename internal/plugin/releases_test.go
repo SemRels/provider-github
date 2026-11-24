@@ -5,7 +5,6 @@
 package plugin
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"encoding/pem"
@@ -383,17 +382,15 @@ func TestUploadReleaseAssetsNoAssetsConfigured(t *testing.T) {
 		called.Store(true)
 		return nil, errors.New("should not be called")
 	})}}
-	var stderr bytes.Buffer
-	cli.UploadReleaseAssets(context.Background(), Config{}, &Release{ID: 42}, &stderr)
+	if err := cli.UploadReleaseAssets(context.Background(), Config{}, &Release{ID: 42}); err != nil {
+		t.Fatalf("UploadReleaseAssets() error = %v", err)
+	}
 	if called.Load() {
 		t.Fatal("expected no upload attempt")
 	}
-	if stderr.Len() != 0 {
-		t.Fatalf("stderr = %q, want empty", stderr.String())
-	}
 }
 
-func TestUploadReleaseAssetsNoMatchesWarns(t *testing.T) {
+func TestUploadReleaseAssetsNoMatchesReturnsError(t *testing.T) {
 	dir := t.TempDir()
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -413,13 +410,12 @@ func TestUploadReleaseAssetsNoMatchesWarns(t *testing.T) {
 		called.Store(true)
 		return nil, errors.New("should not be called")
 	})}}
-	var stderr bytes.Buffer
-	cli.UploadReleaseAssets(context.Background(), Config{Assets: "dist/*.zip"}, &Release{ID: 42}, &stderr)
+	err = cli.UploadReleaseAssets(context.Background(), Config{Assets: "dist/*.zip"}, &Release{ID: 42})
 	if called.Load() {
 		t.Fatal("expected no upload attempt")
 	}
-	if got := stderr.String(); !strings.Contains(got, `asset pattern "dist/*.zip" matched no files`) {
-		t.Fatalf("stderr = %q", got)
+	if err == nil || !strings.Contains(err.Error(), `asset pattern "dist/*.zip" matched no files`) {
+		t.Fatalf("UploadReleaseAssets() error = %v", err)
 	}
 }
 
@@ -484,20 +480,18 @@ func TestUploadReleaseAssetsExpandsGlobs(t *testing.T) {
 	}))
 	defer server.Close()
 
-	var stderr bytes.Buffer
 	cli := &client{httpClient: server.Client()}
-	cli.UploadReleaseAssets(context.Background(), Config{
+	if err := cli.UploadReleaseAssets(context.Background(), Config{
 		Token:   "token",
 		Owner:   "owner",
 		Repo:    "repo",
 		BaseURL: server.URL,
 		Assets:  "dist/*.tar.gz, dist/*.zip",
-	}, &Release{ID: 42}, &stderr)
+	}, &Release{ID: 42}); err != nil {
+		t.Fatalf("UploadReleaseAssets() error = %v", err)
+	}
 	close(uploaded)
 
-	if stderr.Len() != 0 {
-		t.Fatalf("stderr = %q, want empty", stderr.String())
-	}
 	got := make([]string, 0, 2)
 	for item := range uploaded {
 		got = append(got, item)
@@ -808,10 +802,8 @@ func TestGHESEndToEndReleaseCommentsAndAssetUpload(t *testing.T) {
 			if err != nil {
 				t.Fatalf("CreateRelease() error = %v", err)
 			}
-			var stderr bytes.Buffer
-			cli.UploadReleaseAssets(context.Background(), cfg, release, &stderr)
-			if stderr.Len() != 0 {
-				t.Fatalf("UploadReleaseAssets() stderr = %q", stderr.String())
+			if err := cli.UploadReleaseAssets(context.Background(), cfg, release); err != nil {
+				t.Fatalf("UploadReleaseAssets() error = %v", err)
 			}
 			if err := cli.CommentOnPullRequests(context.Background(), cfg, release); err != nil {
 				t.Fatalf("CommentOnPullRequests() error = %v", err)
