@@ -10,7 +10,10 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	plugin "github.com/SemRels/provider-github/internal/plugin"
@@ -107,6 +110,34 @@ func TestRunDryRunWithCredentials(t *testing.T) {
 	}
 	if strings.Contains(stdout.String(), "secret-token") || strings.Contains(stderr.String(), "secret-token") {
 		t.Fatal("dry-run leaked token")
+	}
+}
+
+func TestNumericDryRunDoesNotCreateRelease(t *testing.T) {
+	t.Parallel()
+
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		w.WriteHeader(http.StatusCreated)
+	}))
+	t.Cleanup(server.Close)
+
+	var stdout, stderr bytes.Buffer
+	code := run(context.Background(), envMap(map[string]string{
+		"GITHUB_TOKEN":           "token",
+		"GITHUB_REPOSITORY":      "owner/repo",
+		"SEMREL_PLUGIN_BASE_URL": server.URL,
+		"SEMREL_TAG_NAME":        "v1.2.3",
+		"SEMREL_DRY_RUN":         "1",
+	}), &stdout, &stderr, plugin.CreateRelease, func(context.Context, plugin.Config, *plugin.Release, io.Writer) {
+		t.Fatal("uploadAssets should not be called during dry-run")
+	})
+	if requests.Load() != 0 {
+		t.Fatalf("dry-run made %d HTTP requests", requests.Load())
+	}
+	if code != 0 || !strings.Contains(stdout.String(), "dry-run") {
+		t.Fatalf("dry-run code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
 }
 
