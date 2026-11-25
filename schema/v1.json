@@ -4,6 +4,7 @@
   "title": "provider-github plugin configuration",
   "description": "Schema v1 for the provider-github semrel plugin. Configure via SEMREL_* environment variables.",
   "type": "object",
+  "x-semrel-dry-run": true,
   "properties": {
     "SEMREL_PLUGIN_TOKEN": {
       "type": "string",
