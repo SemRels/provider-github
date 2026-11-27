@@ -66,7 +66,7 @@ Every option can be set as an entry under `args` in `.semrel.yaml`. semrel passe
 | `insecure_skip_verify` | `SEMREL_PLUGIN_INSECURE_SKIP_VERIFY` | Optional | Skip TLS certificate verification (`true`/`1`). Use only as a last resort. | `false` |
 | `draft` | `SEMREL_PLUGIN_DRAFT` | Optional | Create the release as a draft. | false |
 | `prerelease` | `SEMREL_PLUGIN_PRERELEASE` | Optional | Mark the release as a prerelease. | false |
-| `assets` | `SEMREL_PLUGIN_ASSETS` | Optional | Comma-separated file paths or glob patterns to upload as GitHub Release assets. | None |
+| `assets` | `SEMREL_PLUGIN_ASSETS` | Optional | Comma-separated file paths or glob patterns to upload as GitHub Release assets. Each pattern must match; missing files or upload errors fail the plugin. | None |
 | `comment_on_prs` | `SEMREL_PLUGIN_COMMENT_ON_PRS` | Optional | Add an idempotent comment to pull requests included in the release. Defaults to true; set to `false` to disable. The token needs pull-request read and issue-comment write permissions. | true |
 
 ## `SEMREL_*` and GitHub environment context used
@@ -103,7 +103,7 @@ plugins:
 
 ## Example behavior
 
-The plugin creates a GitHub release for the current tag, publishes the changelog as release notes, and can upload matching assets listed in `SEMREL_PLUGIN_ASSETS`. By default it finds pull requests associated with commits since the previous release and comments with a link to the new release. Set `SEMREL_PLUGIN_COMMENT_ON_PRS` to `false` to disable comments. Re-running the same release does not duplicate comments.
+The plugin creates a GitHub release for the current tag, publishes the changelog as release notes, and uploads matching assets listed in `SEMREL_PLUGIN_ASSETS`. Each configured pattern must match at least one regular file; missing files and upload errors fail the plugin instead of being silently ignored. By default it finds pull requests associated with commits since the previous release and comments with a link to the new release. Set `SEMREL_PLUGIN_COMMENT_ON_PRS` to `false` to disable comments. Re-running the same release does not duplicate comments.
 
 Examples:
 

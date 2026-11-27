@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"io"
 	"strings"
 	"testing"
 
@@ -29,8 +28,9 @@ func TestRunSuccess(t *testing.T) {
 			t.Fatalf("unexpected config: %+v", cfg)
 		}
 		return &plugin.Release{ID: 42, URL: "https://github.com/owner/repo/releases/tag/v1.2.3"}, nil
-	}, func(_ context.Context, _ plugin.Config, _ *plugin.Release, _ io.Writer) {
+	}, func(_ context.Context, _ plugin.Config, _ *plugin.Release) error {
 		uploadCalled = true
+		return nil
 	})
 	if code != 0 {
 		t.Fatalf("run() code = %d, want 0 (stderr=%q)", code, stderr.String())
@@ -59,8 +59,9 @@ func TestRunDryRun(t *testing.T) {
 			t.Fatalf("unexpected config: %+v", cfg)
 		}
 		return &plugin.Release{URL: "https://github.com/owner/repo/releases/tag/v1.2.3"}, nil
-	}, func(_ context.Context, _ plugin.Config, _ *plugin.Release, _ io.Writer) {
+	}, func(_ context.Context, _ plugin.Config, _ *plugin.Release) error {
 		uploadCalled = true
+		return nil
 	})
 	if code != 0 {
 		t.Fatalf("run() code = %d, want 0 (stderr=%q)", code, stderr.String())
@@ -83,8 +84,9 @@ func TestRunConfigError(t *testing.T) {
 	}), &stdout, &stderr, func(context.Context, plugin.Config) (*plugin.Release, error) {
 		t.Fatal("createRelease should not be called")
 		return nil, nil
-	}, func(context.Context, plugin.Config, *plugin.Release, io.Writer) {
+	}, func(context.Context, plugin.Config, *plugin.Release) error {
 		t.Fatal("uploadAssets should not be called")
+		return nil
 	})
 	if code != 1 {
 		t.Fatalf("run() code = %d, want 1", code)
@@ -105,14 +107,37 @@ func TestRunCreateReleaseError(t *testing.T) {
 		"SEMREL_TAG_NAME":   "v1.2.3",
 	}), &stdout, &stderr, func(context.Context, plugin.Config) (*plugin.Release, error) {
 		return nil, errors.New("boom")
-	}, func(context.Context, plugin.Config, *plugin.Release, io.Writer) {
+	}, func(context.Context, plugin.Config, *plugin.Release) error {
 		t.Fatal("uploadAssets should not be called")
+		return nil
 	})
 	if code != 1 {
 		t.Fatalf("run() code = %d, want 1", code)
 	}
 	if stdout.Len() != 0 || !strings.Contains(stderr.String(), "boom") {
 		t.Fatalf("stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+}
+
+func TestRunUploadAssetsError(t *testing.T) {
+	t.Parallel()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := run(context.Background(), envMap(map[string]string{
+		"GITHUB_TOKEN":      "token",
+		"GITHUB_REPOSITORY": "owner/repo",
+		"SEMREL_TAG_NAME":   "v1.2.3",
+	}), &stdout, &stderr, func(context.Context, plugin.Config) (*plugin.Release, error) {
+		return &plugin.Release{ID: 42}, nil
+	}, func(context.Context, plugin.Config, *plugin.Release) error {
+		return errors.New("asset upload failed")
+	})
+	if code != 1 {
+		t.Fatalf("run() code = %d, want 1", code)
+	}
+	if !strings.Contains(stderr.String(), "asset upload failed") {
+		t.Fatalf("stderr = %q, want asset failure", stderr.String())
 	}
 }
 
